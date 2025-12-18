@@ -14,15 +14,11 @@ export async function GET(request: NextRequest) {
       'SELECT COUNT(*) as count FROM subscribers'
     ).first();
 
-    // 示例：列出 R2 存储桶中的对象
-    const r2List = await env.ASSETS.list({ limit: 10 });
-
     return Response.json({
       success: true,
       data: {
         subscriberCount: dbResult?.count || 0,
-        assetsCount: r2List.objects.length,
-        message: 'Successfully connected to D1 and R2!',
+        message: 'Successfully connected to D1!',
       },
     });
   } catch (error) {

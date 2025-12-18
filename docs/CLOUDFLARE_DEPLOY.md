@@ -1,11 +1,11 @@
 # Cloudflare Pages 部署指南
 
-本项目使用 **GitHub Actions + Terraform** 自动化部署到 Cloudflare Pages，集成 D1 数据库和 R2 存储。
+本项目使用 **GitHub Actions + Terraform** 自动化部署到 Cloudflare Pages，集成 D1 数据库。
 
 ## 部署架构
 
 - **CI/CD**: GitHub Actions
-- **基础设施**: Terraform (deploy.tf - 自动创建 D1、R2、Pages 项目)
+- **基础设施**: Terraform (deploy.tf - 自动创建 D1、Pages 项目)
 - **本地开发**: next.config.mjs 中的 setupDevPlatform()
 - **构建工具**: @cloudflare/next-on-pages
 - **部署工具**: Wrangler CLI
@@ -22,7 +22,7 @@
 2. 添加 Secret：
    - `CLOUDFLARE_API_TOKEN`: 你的 Cloudflare API Token
      - 获取方式：登录 Cloudflare Dashboard → My Profile → API Tokens → Create Token
-     - 权限需要：Account.Cloudflare Pages (Edit), Account.D1 (Edit), Account.R2 (Edit)
+     - 权限需要：Account.Cloudflare Pages (Edit), Account.D1 (Edit)
    - `CLOUDFLARE_ACCOUNT_ID` (可选): 你的 Cloudflare Account ID
      - 如果不设置，会自动从 API 获取
 
@@ -36,7 +36,7 @@ git push origin main
 
 推送到 `main` 分支后，GitHub Actions 会自动：
 1. 构建 Next.js 项目
-2. 使用 Terraform 创建/更新 D1 数据库、R2 存储桶、Pages 项目
+2. 使用 Terraform 创建/更新 D1 数据库、Pages 项目
 3. 部署到 Cloudflare Pages
 
 ### 3. 查看部署状态
@@ -61,15 +61,15 @@ npm install --legacy-peer-deps
 ```bash
 # 标准 Next.js 开发（自动加载 Cloudflare 绑定）
 npm run dev
-# next.config.mjs 会自动调用 setupDevPlatform() 配置本地 D1 和 R2
+# next.config.mjs 会自动调用 setupDevPlatform() 配置本地 D1
 
 # 使用 Cloudflare Pages 环境预览（完整模拟生产环境）
 npm run preview
 ```
 
 本地开发时，`setupDevPlatform()` 会：
-- 在 next.config.mjs 中直接配置 D1 和 R2 绑定
-- 创建本地模拟的 D1 数据库和 R2 存储
+- 在 next.config.mjs 中直接配置 D1 绑定
+- 创建本地模拟的 D1 数据库
 - 通过 `getRequestContext()` 在 API 路由中访问
 
 ## 初始化数据库
@@ -147,31 +147,7 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-### 使用 R2 存储
 
-```typescript
-// app/api/upload/route.ts
-import { NextRequest } from 'next/server';
-
-export const runtime = 'edge';
-
-export async function POST(request: NextRequest) {
-  const env = process.env as unknown as CloudflareEnv;
-  const formData = await request.formData();
-  const file = formData.get('file') as File;
-
-  if (!file) {
-    return Response.json({ error: 'No file provided' }, { status: 400 });
-  }
-
-  try {
-    await env.ASSETS.put(file.name, file.stream());
-    return Response.json({ success: true, filename: file.name });
-  } catch (error) {
-    return Response.json({ error: 'Failed to upload' }, { status: 500 });
-  }
-}
-```
 
 ## 环境变量
 
@@ -222,20 +198,7 @@ wrangler d1 execute newsletter-db --file=./schema.sql --remote
 wrangler d1 export newsletter-db --output=backup.sql --remote
 ```
 
-### R2 存储
-```bash
-# 查看存储桶列表
-wrangler r2 bucket list
 
-# 查看存储桶内容
-wrangler r2 object list newsletter-assets
-
-# 上传文件
-wrangler r2 object put newsletter-assets/test.txt --file=./test.txt
-
-# 下载文件
-wrangler r2 object get newsletter-assets/test.txt --file=./downloaded.txt
-```
 
 ### Pages 部署
 ```bash
@@ -253,5 +216,5 @@ wrangler pages deployment rollback --project-name=newsletter-app
 
 - [Cloudflare Pages](https://developers.cloudflare.com/pages/)
 - [D1 数据库](https://developers.cloudflare.com/d1/)
-- [R2 存储](https://developers.cloudflare.com/r2/)
+
 - [@cloudflare/next-on-pages](https://github.com/cloudflare/next-on-pages)

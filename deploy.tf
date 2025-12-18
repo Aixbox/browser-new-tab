@@ -22,13 +22,6 @@ resource "cloudflare_d1_database" "newsletter_db" {
   name       = "newsletter-db"
 }
 
-# R2 存储桶
-resource "cloudflare_r2_bucket" "newsletter_assets" {
-  account_id = var.CLOUDFLARE_ACCOUNT_ID
-  name       = "newsletter-assets"
-  location   = "APAC"  # 亚太地区，也可以选择 WNAM, ENAM, WEUR, EEUR, OC
-}
-
 # Pages 项目
 resource "cloudflare_pages_project" "newsletter_app" {
   account_id        = var.CLOUDFLARE_ACCOUNT_ID
@@ -42,11 +35,6 @@ resource "cloudflare_pages_project" "newsletter_app" {
         DB = cloudflare_d1_database.newsletter_db.id
       }
 
-      # R2 存储桶绑定
-      r2_buckets = {
-        ASSETS = cloudflare_r2_bucket.newsletter_assets.name
-      }
-
       compatibility_date  = "2024-12-18"
       compatibility_flags = ["nodejs_compat"]
     }
@@ -55,10 +43,6 @@ resource "cloudflare_pages_project" "newsletter_app" {
       # 预览环境使用相同的绑定
       d1_databases = {
         DB = cloudflare_d1_database.newsletter_db.id
-      }
-
-      r2_buckets = {
-        ASSETS = cloudflare_r2_bucket.newsletter_assets.name
       }
 
       compatibility_date  = "2024-12-18"
@@ -70,10 +54,6 @@ resource "cloudflare_pages_project" "newsletter_app" {
 # 输出资源信息
 output "d1_database_id" {
   value = cloudflare_d1_database.newsletter_db.id
-}
-
-output "r2_bucket_name" {
-  value = cloudflare_r2_bucket.newsletter_assets.name
 }
 
 output "pages_project_url" {

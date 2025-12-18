@@ -22,10 +22,6 @@ if (process.env.NODE_ENV === 'development') {
         databaseName: 'newsletter-db',
         databaseId: 'local-dev-db',
       },
-      ASSETS: {
-        type: 'r2',
-        bucketName: 'newsletter-assets',
-      },
     },
   });
 }
