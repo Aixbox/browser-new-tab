@@ -31,10 +31,10 @@
 ```bash
 git add .
 git commit -m "feat: setup cloudflare deployment"
-git push origin main
+git push origin master
 ```
 
-推送到 `main` 分支后，GitHub Actions 会自动：
+推送到 `master` 分支后，GitHub Actions 会自动：
 1. 构建 Next.js 项目
 2. 使用 Terraform 创建/更新 D1 数据库、Pages 项目
 3. 部署到 Cloudflare Pages
