@@ -26,7 +26,7 @@ resource "cloudflare_d1_database" "newsletter_db" {
 resource "cloudflare_r2_bucket" "newsletter_assets" {
   account_id = var.CLOUDFLARE_ACCOUNT_ID
   name       = "newsletter-assets"
-  location   = "auto"
+  location   = "APAC"  # 亚太地区，也可以选择 WNAM, ENAM, WEUR, EEUR, OC
 }
 
 # Pages 项目
