@@ -20,11 +20,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+          cache: 'npm'
 
       # 自动获取 Account ID
       - name: Fetch Account ID
@@ -48,14 +44,12 @@ jobs:
 
       # 安装依赖
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       # 构建并转换为 Cloudflare Pages 格式
       # @cloudflare/next-on-pages 会自动调用 next build
       - name: Build for Cloudflare Pages
         run: npx @cloudflare/next-on-pages
-        env:
-          SKIP_DEPENDENCY_INSTALL: true
 
       # 使用 Terraform 部署基础设施
       - name: Deploy infrastructure with Terraform

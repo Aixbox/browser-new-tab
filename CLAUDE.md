@@ -24,7 +24,7 @@ npm run lint
 ```
 
 ### Package Management
-The project uses pnpm as the package manager, as confirmed by the pnpm-lock.yaml file.
+The project uses npm as the package manager.
 
 ## Core Architecture
 

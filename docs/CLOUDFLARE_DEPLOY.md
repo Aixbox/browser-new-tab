@@ -51,18 +51,18 @@ git push origin main
 ### 安装依赖
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### 本地开发服务器
 
 ```bash
 # 标准 Next.js 开发（自动加载 Cloudflare 绑定）
-pnpm run dev
+npm run dev
 # next.config.mjs 会自动调用 setupDevPlatform() 配置本地 D1 和 R2
 
 # 使用 Cloudflare Pages 环境预览（完整模拟生产环境）
-pnpm run preview
+npm run preview
 ```
 
 本地开发时，`setupDevPlatform()` 会：
@@ -111,7 +111,7 @@ terraform init
 terraform apply
 
 # 5. 构建并部署
-pnpm run build
+npm run build
 npx @cloudflare/next-on-pages
 npx wrangler pages deploy .vercel/output/static --project-name newsletter-app
 ```
