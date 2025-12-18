@@ -48,7 +48,7 @@ jobs:
 
       # 安装依赖
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       # 构建 Next.js 项目
       - name: Build Next.js
@@ -56,7 +56,9 @@ jobs:
 
       # 使用 @cloudflare/next-on-pages 转换构建输出
       - name: Build for Cloudflare Pages
-        run: npx @cloudflare/next-on-pages
+        run: pnpm exec @cloudflare/next-on-pages
+        env:
+          NODE_ENV: production
 
       # 使用 Terraform 部署基础设施
       - name: Deploy infrastructure with Terraform
