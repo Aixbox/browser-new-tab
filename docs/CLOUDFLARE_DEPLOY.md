@@ -51,8 +51,10 @@ git push origin main
 ### 安装依赖
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 ```
+
+> **注意**: 使用 `--legacy-peer-deps` 是因为某些依赖（如 vaul）还未正式支持 React 19。
 
 ### 本地开发服务器
 
@@ -110,7 +112,10 @@ terraform init
 # 4. 创建基础设施
 terraform apply
 
-# 5. 构建并部署
+# 5. 安装依赖
+npm install --legacy-peer-deps
+
+# 6. 构建并部署
 npm run build
 npx @cloudflare/next-on-pages
 npx wrangler pages deploy .vercel/output/static --project-name newsletter-app

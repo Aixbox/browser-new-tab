@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
 
       # 自动获取 Account ID
@@ -44,7 +44,7 @@ jobs:
 
       # 安装依赖
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       # 构建并转换为 Cloudflare Pages 格式
       # @cloudflare/next-on-pages 会自动调用 next build
