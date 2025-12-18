@@ -25,7 +25,7 @@ resource "cloudflare_d1_database" "newsletter_db" {
 # Pages 项目
 resource "cloudflare_pages_project" "newsletter_app" {
   account_id        = var.CLOUDFLARE_ACCOUNT_ID
-  name              = "newsletter-app"
+  name              = "new-tab"
   production_branch = "master"
 
   deployment_configs {

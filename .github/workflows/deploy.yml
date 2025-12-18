@@ -75,12 +75,24 @@ jobs:
           fi
           
           # 检查并导入现有的 Pages 项目
-          echo "Importing Pages project (if exists)..."
-          terraform import cloudflare_pages_project.newsletter_app "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/newsletter-app" || echo "Pages project import failed or already imported, continuing..."
+          echo "Checking for existing Pages project..."
+          PAGES_RESPONSE=$(curl -s "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/pages/projects/new-tab" \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          
+          if echo "$PAGES_RESPONSE" | jq -e '.success == true' > /dev/null; then
+            echo "Found existing Pages project, importing..."
+            terraform import cloudflare_pages_project.newsletter_app "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/new-tab" || echo "Pages project import failed or already imported, continuing..."
+          else
+            echo "No existing Pages project found, will create new one"
+          fi
           
           # 应用 Terraform 配置
           echo "Applying Terraform configuration..."
           terraform apply -auto-approve -input=false
+          
+          # 等待项目创建完成
+          echo "Waiting for Pages project to be ready..."
+          sleep 10
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
@@ -88,7 +100,13 @@ jobs:
       # 上传到 Cloudflare Pages
       - name: Deploy to Cloudflare Pages
         run: |
-          npx wrangler pages deploy .vercel/output/static --project-name new-tab
+          echo "Deploying to Cloudflare Pages..."
+          # 使用 --compatibility-flags 确保 Node.js 兼容性
+          npx wrangler pages deploy .vercel/output/static \
+            --project-name new-tab \
+            --production \
+            --commit-dirty=true \
+            --compatibility-flags nodejs_compat
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
@@ -97,4 +115,4 @@ jobs:
       - name: Output deployment info
         run: |
           echo "✅ Deployment completed!"
-          echo "🌐 Your site will be available at: https://newsletter-app.pages.dev"
+          echo "🌐 Your site will be available at: https://new-tab.pages.dev"

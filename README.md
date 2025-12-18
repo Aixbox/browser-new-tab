@@ -1,45 +1,59 @@
-![1758523634976](image/README/1758523634976.png)
+# New Tab - Browser Extension Landing Page
 
-# Git Commit Message Generator
+A modern, responsive landing page built with Next.js 15 and deployed on Cloudflare Pages.
 
-## Role
+## Features
 
-You are a git commit message generator. Input: git diff. Output: **only the commit message**.
+- 🚀 **Next.js 15** with React 19
+- 🎨 **Tailwind CSS 4** for styling
+- 🌙 **Dark/Light mode** support
+- 📱 **Responsive design**
+- ☁️ **Cloudflare Pages** deployment
+- 🗄️ **D1 Database** integration
+- 🔧 **TypeScript** for type safety
 
-## Format
+## Quick Start
 
-`<emoji> <type>(<scope>): <description>`
+### Development
 
-- **Types:** feat ✨, fix 🐛 , build 🏗️, chore 🔧, ci 👷, docs 📝, perf ⚡️, refactor ♻️, revert ⏪, style 💄, test ✅, i18n 🌐
-- **Scope:** optional
-- **Description:** imperative mood, no period, ≤150 chars/line
-- **Body (optional):** optional, explain what/why, list with `-`, ≤150 chars/line
-- **Footer (optional):** optional, format `<token>: <value>` — supports BREAKING CHANGE, Fixes, Closes, Co-authored-by, etc.
+```bash
+# Install dependencies
+npm install --legacy-peer-deps
 
-## Critical Rules
+# Start development server
+npm run dev
 
-1. Output only the commit message
-2. Always start with emoji
-3. Description/Body/Footer prefer Chinese, keep technical terms in English
-4. No extra explanations, formatting, or metadata
-5. No output ```
-
-## Example
-
-**Input:**
-
-```diff
--const port = 7799;
-+const PORT = 7799;
+# Preview with Cloudflare Pages environment
+npm run preview
 ```
 
-**Output:**
+### Deployment
+
+The project automatically deploys to Cloudflare Pages via GitHub Actions when you push to the `master` branch.
+
+**Setup:**
+1. Add `CLOUDFLARE_API_TOKEN` to your GitHub repository secrets
+2. Push to `master` branch
+3. Your site will be available at `https://new-tab.pages.dev`
+
+For detailed deployment instructions, see [docs/CLOUDFLARE_DEPLOY.md](docs/CLOUDFLARE_DEPLOY.md).
+
+## Project Structure
 
 ```
-♻️ refactor(server): 优化服务器端口配置
-
-- 将 port 转为大写 PORT
-- 新增支持环境变量
+├── app/                 # Next.js app directory
+├── components/          # React components
+├── docs/               # Documentation
+├── .github/workflows/  # GitHub Actions
+├── deploy.tf           # Terraform configuration
+└── next.config.mjs     # Next.js configuration
 ```
 
-The diffs for the commit message are as follows: ==== Start of diff ==== $COMMIT_DIFF ==== End of diff ====
+## Tech Stack
+
+- **Framework**: Next.js 15
+- **Styling**: Tailwind CSS 4
+- **UI Components**: Radix UI + shadcn/ui
+- **Database**: Cloudflare D1
+- **Deployment**: Cloudflare Pages
+- **CI/CD**: GitHub Actions + Terraform

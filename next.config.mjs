@@ -14,7 +14,7 @@ const nextConfig = {
 if (process.env.NODE_ENV === 'development') {
   const { setupDevPlatform } = await import('@cloudflare/next-on-pages/next-dev');
   
-  // 直接配置本地开发绑定，不需要 wrangler.toml
+  // 配置本地开发平台绑定
   await setupDevPlatform({
     bindings: {
       DB: {
@@ -22,6 +22,9 @@ if (process.env.NODE_ENV === 'development') {
         databaseName: 'newsletter-db',
         databaseId: 'local-dev-db',
       },
+    },
+    persist: {
+      path: '.wrangler/state/v3',
     },
   });
 }

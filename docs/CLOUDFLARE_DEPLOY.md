@@ -44,7 +44,7 @@ git push origin master
 - GitHub Actions: 仓库的 **Actions** 标签页
 - Cloudflare Dashboard: https://dash.cloudflare.com/
 
-部署完成后，你的网站将在：`https://newsletter-app.pages.dev`
+部署完成后，你的网站将在：`https://new-tab.pages.dev`
 
 ## 本地开发
 
@@ -118,7 +118,7 @@ npm install --legacy-peer-deps
 # 6. 构建并部署
 npm run build
 npx @cloudflare/next-on-pages
-npx wrangler pages deploy .vercel/output/static --project-name newsletter-app
+npx wrangler pages deploy .vercel/output/static --project-name new-tab
 ```
 
 ## 在代码中使用 D1 和 R2
@@ -157,9 +157,9 @@ export async function POST(request: NextRequest) {
 
 ## 注意事项
 
-1. **Edge Runtime**: 使用 D1 和 R2 的 API 路由需要设置 `export const runtime = 'edge'`
-2. **兼容性**: 确保 `wrangler.toml` 中的 `compatibility_flags` 包含 `nodejs_compat`
-3. **数据库 ID**: 记得在 `wrangler.toml` 中更新实际的 D1 数据库 ID
+1. **Edge Runtime**: 使用 D1 数据库的 API 路由需要设置 `export const runtime = 'edge'`
+2. **兼容性**: 项目自动配置 `nodejs_compat` 兼容性标志
+3. **数据库绑定**: D1 数据库通过 Terraform 自动绑定，无需手动配置
 4. **构建输出**: Next.js 构建输出会在 `.vercel/output/static` 目录
 
 ## Terraform 管理
@@ -203,13 +203,13 @@ wrangler d1 export newsletter-db --output=backup.sql --remote
 ### Pages 部署
 ```bash
 # 查看部署列表
-wrangler pages deployment list --project-name=newsletter-app
+wrangler pages deployment list --project-name=new-tab
 
 # 查看实时日志
-wrangler pages deployment tail --project-name=newsletter-app
+wrangler pages deployment tail --project-name=new-tab
 
 # 回滚到之前的部署
-wrangler pages deployment rollback --project-name=newsletter-app
+wrangler pages deployment rollback --project-name=new-tab
 ```
 
 ## 参考文档
