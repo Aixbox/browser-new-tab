@@ -55,29 +55,11 @@ jobs:
       - name: Deploy infrastructure with Terraform
         run: |
           terraform init
-
-          # 尝试导入已存在的资源
-          D1_ID=$(curl "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/d1/database" \
-            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
-            jq -r '.result[] | select(.name == "newsletter-db") | .uuid')
           
-          if [ -n "$D1_ID" ]; then
-            echo "Importing existing D1 database..."
-            terraform import cloudflare_d1_database.newsletter_db "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$D1_ID" || echo "D1 import failed, continuing..."
-          fi
-
-          R2_EXISTS=$(curl "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/r2/buckets/newsletter-assets" \
-            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r '.success')
+          echo "Account ID: $TF_VAR_CLOUDFLARE_ACCOUNT_ID"
+          echo "Deploying Cloudflare infrastructure..."
           
-          if [ "$R2_EXISTS" == "true" ]; then
-            echo "Importing existing R2 bucket..."
-            terraform import cloudflare_r2_bucket.newsletter_assets "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/newsletter-assets" || echo "R2 import failed, continuing..."
-          fi
-
-          # 导入 Pages 项目
-          terraform import cloudflare_pages_project.newsletter_app "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/newsletter-app" || echo "Pages project import failed, continuing..."
-
-          # 应用 Terraform 配置
+          # 直接应用 Terraform 配置，让它创建或更新资源
           terraform apply -auto-approve -input=false
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
