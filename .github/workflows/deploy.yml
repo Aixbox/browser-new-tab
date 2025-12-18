@@ -1,0 +1,105 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # 自动获取 Account ID
+      - name: Fetch Account ID
+        id: fetch_account_id
+        run: |
+          if [[ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]]; then
+            ACCOUNT_ID="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+            echo "Using provided CLOUDFLARE_ACCOUNT_ID from secrets."
+          else
+            ACCOUNT_ID=$(curl -X GET "https://api.cloudflare.com/client/v4/accounts" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type:application/json" | jq ".result[0].id" -r)
+            if [[ "$ACCOUNT_ID" == "null" ]]; then
+              echo "Failed to get account id, please set CLOUDFLARE_API_TOKEN correctly!"
+              exit 1
+            fi
+          fi
+          echo 'account_id='$ACCOUNT_ID >> $GITHUB_OUTPUT
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      # 安装依赖
+      - name: Install dependencies
+        run: pnpm install
+
+      # 构建 Next.js 项目
+      - name: Build Next.js
+        run: pnpm run build
+
+      # 使用 @cloudflare/next-on-pages 转换构建输出
+      - name: Build for Cloudflare Pages
+        run: npx @cloudflare/next-on-pages
+
+      # 使用 Terraform 部署基础设施
+      - name: Deploy infrastructure with Terraform
+        run: |
+          terraform init
+
+          # 尝试导入已存在的资源
+          D1_ID=$(curl "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/d1/database" \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | \
+            jq -r '.result[] | select(.name == "newsletter-db") | .uuid')
+          
+          if [ -n "$D1_ID" ]; then
+            echo "Importing existing D1 database..."
+            terraform import cloudflare_d1_database.newsletter_db "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$D1_ID" || echo "D1 import failed, continuing..."
+          fi
+
+          R2_EXISTS=$(curl "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/r2/buckets/newsletter-assets" \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r '.success')
+          
+          if [ "$R2_EXISTS" == "true" ]; then
+            echo "Importing existing R2 bucket..."
+            terraform import cloudflare_r2_bucket.newsletter_assets "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/newsletter-assets" || echo "R2 import failed, continuing..."
+          fi
+
+          # 导入 Pages 项目
+          terraform import cloudflare_pages_project.newsletter_app "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/newsletter-app" || echo "Pages project import failed, continuing..."
+
+          # 应用 Terraform 配置
+          terraform apply -auto-approve -input=false
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
+
+      # 上传到 Cloudflare Pages
+      - name: Deploy to Cloudflare Pages
+        run: |
+          npx wrangler pages deploy .vercel/output/static --project-name newsletter-app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
+
+      # 输出部署信息
+      - name: Output deployment info
+        run: |
+          echo "✅ Deployment completed!"
+          echo "🌐 Your site will be available at: https://newsletter-app.pages.dev"
