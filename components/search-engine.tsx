@@ -18,6 +18,7 @@ interface SearchEngine {
 // Logo显示组件
 const LogoDisplay = ({ logo, name }: { logo: string; name: string }) => {
   const [hasError, setHasError] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
 
   if (logo === "default" || hasError) {
     return (
@@ -27,12 +28,24 @@ const LogoDisplay = ({ logo, name }: { logo: string; name: string }) => {
     );
   }
 
+  const handleError = () => {
+    if (!useProxy) {
+      // 第一次失败，尝试使用代理
+      setUseProxy(true);
+    } else {
+      // 代理也失败了，显示默认图标
+      setHasError(true);
+    }
+  };
+
+  const imageUrl = useProxy ? `/api/icon?url=${encodeURIComponent(logo)}` : logo;
+
   return (
     <img 
-      src={logo} 
+      src={imageUrl} 
       alt={name}
       className="w-6 h-6 mb-1"
-      onError={() => setHasError(true)}
+      onError={handleError}
     />
   );
 };
@@ -40,17 +53,30 @@ const LogoDisplay = ({ logo, name }: { logo: string; name: string }) => {
 // 小尺寸Logo显示组件
 const SmallLogoDisplay = ({ logo, name }: { logo: string; name: string }) => {
   const [hasError, setHasError] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
 
   if (logo === "default" || hasError) {
     return <GlobeIcon className="w-6 h-6 text-white" />;
   }
 
+  const handleError = () => {
+    if (!useProxy) {
+      // 第一次失败，尝试使用代理
+      setUseProxy(true);
+    } else {
+      // 代理也失败了，显示默认图标
+      setHasError(true);
+    }
+  };
+
+  const imageUrl = useProxy ? `/api/icon?url=${encodeURIComponent(logo)}` : logo;
+
   return (
     <img 
-      src={logo} 
+      src={imageUrl} 
       alt={name}
       className="w-6 h-6"
-      onError={() => setHasError(true)}
+      onError={handleError}
     />
   );
 };
