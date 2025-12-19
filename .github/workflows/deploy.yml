@@ -101,12 +101,10 @@ jobs:
       - name: Deploy to Cloudflare Pages
         run: |
           echo "Deploying to Cloudflare Pages..."
-          # 使用 --compatibility-flags 确保 Node.js 兼容性
+          # 部署到生产环境 (master 分支自动部署到生产)
           npx wrangler pages deploy .vercel/output/static \
             --project-name new-tab \
-            --production \
-            --commit-dirty=true \
-            --compatibility-flags nodejs_compat
+            --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
