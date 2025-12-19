@@ -3,6 +3,7 @@ import { SidebarDemo } from "@/components/sidebar-demo";
 import { SearchEngine } from "@/components/search-engine";
 import { SimpleTimeDisplay } from "@/components/simple-time-display";
 import { DraggableSearchGrid } from "@/components/draggable-search-grid";
+import { SettingsDialog } from "@/components/settings-drawer";
 
 export default function Home() {
   return (
@@ -15,6 +16,9 @@ export default function Home() {
           <SearchEngine />
           <DraggableSearchGrid />
         </div>
+        
+        {/* 设置对话框 */}
+        <SettingsDialog />
       </div>
     </main>
   );
