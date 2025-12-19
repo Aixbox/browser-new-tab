@@ -5,8 +5,6 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "preview": "npx @cloudflare/next-on-pages && wrangler pages dev .vercel/output/static --compatibility-flag nodejs_compat --d1 DB",
-    "cf:build": "npx @cloudflare/next-on-pages",
     "lint": "next lint",
     "start": "next start"
   },
