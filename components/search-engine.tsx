@@ -91,9 +91,48 @@ export const SearchEngine = () => {
   const [editingEngine, setEditingEngine] = useState<SearchEngine | null>(null);
   const [newEngine, setNewEngine] = useState({ name: "", url: "", logo: "" });
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const panelRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // 点击外部关闭面板
+  // 获取搜索建议
+  const fetchSuggestions = async (searchQuery: string) => {
+    if (searchQuery.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/suggestions?q=${encodeURIComponent(searchQuery)}&engine=${selectedEngine}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSuggestions(data.slice(0, 8)); // 最多显示8个建议
+        setShowSuggestions(data.length > 0);
+      }
+    } catch (error) {
+      console.error('获取搜索建议失败:', error);
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  // 防抖获取建议
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query && !isPanelOpen) {
+        fetchSuggestions(query);
+      } else {
+        setShowSuggestions(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query, selectedEngine, isPanelOpen]);
+
+  // 点击外部关闭面板和建议
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       // 如果右键菜单打开，不关闭面板
@@ -103,6 +142,7 @@ export const SearchEngine = () => {
         setIsPanelOpen(false);
         setIsAddingEngine(false);
         setEditingEngine(null);
+        setShowSuggestions(false);
       }
     };
 
@@ -112,12 +152,53 @@ export const SearchEngine = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    const searchQuery = selectedSuggestionIndex >= 0 ? suggestions[selectedSuggestionIndex] : query;
+    if (!searchQuery.trim()) return;
     
     const engine = searchEngines.find(e => e.id === selectedEngine);
     if (engine) {
-      window.open(engine.url + encodeURIComponent(query.trim()), '_blank');
+      window.open(engine.url + encodeURIComponent(searchQuery.trim()), '_blank');
+      setShowSuggestions(false);
+      setSelectedSuggestionIndex(-1);
     }
+  };
+
+  // 处理键盘导航
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => 
+          prev < suggestions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => prev > -1 ? prev - 1 : -1);
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+        break;
+      case 'Tab':
+        if (selectedSuggestionIndex >= 0) {
+          e.preventDefault();
+          setQuery(suggestions[selectedSuggestionIndex]);
+          setShowSuggestions(false);
+          setSelectedSuggestionIndex(-1);
+        }
+        break;
+    }
+  };
+
+  // 选择建议
+  const selectSuggestion = (suggestion: string) => {
+    setQuery(suggestion);
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+    inputRef.current?.focus();
   };
 
   const handleAddEngine = () => {
@@ -217,12 +298,17 @@ export const SearchEngine = () => {
 
         {/* 搜索输入框 */}
         <Input
+          ref={inputRef}
           type="text"
           placeholder="Search the web..."
           autoCapitalize="off"
           autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => {
+            if (suggestions.length > 0) setShowSuggestions(true);
+          }}
           className="pl-14 pr-16"
         />
 
@@ -242,6 +328,38 @@ export const SearchEngine = () => {
           </button>
         </div>
       </form>
+
+      {/* 搜索建议下拉列表 */}
+      <AnimatePresence>
+        {showSuggestions && suggestions.length > 0 && !isPanelOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full mt-2 w-full bg-primary/20 backdrop-blur-md border-2 border-white/50 rounded-lg overflow-hidden z-30"
+          >
+            {suggestions.map((suggestion, index) => (
+              <div
+                key={index}
+                className={cn(
+                  "px-4 py-3 cursor-pointer transition-colors text-white",
+                  selectedSuggestionIndex === index
+                    ? "bg-white/20"
+                    : "hover:bg-white/10"
+                )}
+                onClick={() => selectSuggestion(suggestion)}
+                onMouseEnter={() => setSelectedSuggestionIndex(index)}
+              >
+                <div className="flex items-center gap-3">
+                  <MagnifyingGlassIcon className="w-4 h-4 text-white/60 flex-shrink-0" />
+                  <span className="text-sm">{suggestion}</span>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 搜索引擎管理面板 */}
       <AnimatePresence>
