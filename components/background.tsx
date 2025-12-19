@@ -103,7 +103,7 @@ export const Background = ({
   const isVideoFile = isVideo(extension);
 
   const classNames =
-    "absolute bg-background left-0 top-0 w-full h-full object-cover rounded-[42px] md:rounded-[72px]";
+    "absolute bg-background left-0 top-0 w-full h-full object-cover";
 
   if (isVideoFile) {
     return (
