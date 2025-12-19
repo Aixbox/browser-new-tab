@@ -70,12 +70,12 @@ export const SimpleTimeDisplay = () => {
     return () => clearInterval(lunarTimer);
   }, [timeData.currentTime.getDate()]); // 当日期变化时更新
 
-  // 获取网络时间（可选，用于校准）
+  // 获取网络时间（通过本地API代理）
   const fetchNetworkTime = async () => {
     try {
-      const timeResponse = await fetch('https://worldtimeapi.org/api/timezone/Asia/Shanghai');
+      const timeResponse = await fetch('/api/time');
       if (timeResponse.ok) {
-        const timeResult = await timeResponse.json();
+        const timeResult: any = await timeResponse.json();
         setTimeData(prev => ({
           ...prev,
           networkTime: timeResult.datetime
@@ -89,6 +89,9 @@ export const SimpleTimeDisplay = () => {
   // 组件加载时获取网络时间
   useEffect(() => {
     fetchNetworkTime();
+    // 每5分钟同步一次网络时间
+    const interval = setInterval(fetchNetworkTime, 300000);
+    return () => clearInterval(interval);
   }, []);
 
   // 格式化时间显示
