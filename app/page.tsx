@@ -2,6 +2,7 @@ import { Background } from "@/components/background";
 import { SidebarDemo } from "@/components/sidebar-demo";
 import { SearchEngine } from "@/components/search-engine";
 import { SimpleTimeDisplay } from "@/components/simple-time-display";
+import { DraggableSearchGrid } from "@/components/draggable-search-grid";
 
 export default function Home() {
   return (
@@ -12,6 +13,7 @@ export default function Home() {
         <div className="p-inset h-full w-full relative pl-16 flex flex-col items-center justify-center gap-8">
           <SimpleTimeDisplay />
           <SearchEngine />
+          <DraggableSearchGrid />
         </div>
       </div>
     </main>
