@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { 
-  GearIcon, 
   Cross2Icon, 
   PersonIcon, 
   ExternalLinkIcon, 
@@ -70,7 +69,7 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange }: SettingsDialo
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] max-w-[90vw] h-[600px] max-h-[80vh] bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-xl z-50 shadow-2xl"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] max-w-[90vw] h-[600px] max-h-[80vh] bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-xl z-50 shadow-2xl flex flex-col overflow-hidden"
             onClick={handleDialogClick}
           >
             {/* 对话框头部 */}
@@ -85,9 +84,9 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange }: SettingsDialo
             </div>
 
             {/* 对话框内容 - 左右布局 */}
-            <div className="flex h-full">
+            <div className="flex flex-1 overflow-hidden">
               {/* 左侧导航栏 */}
-              <div className="w-48 border-r border-white/20 p-4">
+              <div className="w-48 border-r border-white/20 p-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 <nav className="space-y-1">
                   {navigationItems.map((item) => {
                     const IconComponent = item.icon;
@@ -111,7 +110,7 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange }: SettingsDialo
               </div>
 
               {/* 右侧内容区域 */}
-              <div className="flex-1 p-6 overflow-y-auto">
+              <div className="flex-1 p-6 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {children || (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center text-white/60">
