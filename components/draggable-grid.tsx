@@ -148,13 +148,11 @@ const DraggableItem = ({ item }: {
 
     if (item.iconType === 'logo' && item.iconLogo) {
       return (
-        <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-white/5">
-          <IconImage 
-            src={item.iconLogo}
-            alt={item.name}
-            className="w-8 h-8 rounded"
-          />
-        </div>
+        <IconImage 
+          src={item.iconLogo}
+          alt={item.name}
+          className="w-12 h-12 rounded-lg object-contain"
+        />
       );
     }
 
@@ -171,11 +169,11 @@ const DraggableItem = ({ item }: {
       style={style}
       {...attributes}
       {...listeners}
-      className="flex flex-col items-center p-3 rounded-xl cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors group"
+      className="flex flex-col items-center gap-2 p-2 rounded-xl cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors group"
       onClick={() => window.open(item.url, '_blank')}
     >
       {renderIcon()}
-      <span className="text-xs text-white/90 text-center font-medium leading-tight mt-2">
+      <span className="text-xs text-white/90 text-center font-medium leading-tight max-w-full truncate">
         {item.name}
       </span>
     </div>
@@ -186,10 +184,10 @@ const DraggableItem = ({ item }: {
 const AddIconItem = ({ onClick }: { onClick: () => void }) => {
   return (
     <div
-      className="flex flex-col items-center p-3 rounded-xl cursor-pointer hover:bg-white/10 transition-colors border-2 border-dashed border-white/30 hover:border-white/50"
+      className="flex flex-col items-center gap-2 p-2 rounded-xl cursor-pointer hover:bg-white/10 transition-colors border-2 border-dashed border-white/30 hover:border-white/50"
       onClick={onClick}
     >
-      <div className="w-12 h-12 mb-2 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+      <div className="w-12 h-12 flex items-center justify-center rounded-lg">
         <PlusIcon className="w-6 h-6 text-white/60" />
       </div>
       <span className="text-xs text-white/60 text-center font-medium">
