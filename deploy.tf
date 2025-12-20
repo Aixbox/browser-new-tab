@@ -16,10 +16,10 @@ variable "CLOUDFLARE_ACCOUNT_ID" {
   type = string
 }
 
-# D1 数据库
-resource "cloudflare_d1_database" "newsletter_db" {
+# KV 命名空间
+resource "cloudflare_workers_kv_namespace" "newtab_kv" {
   account_id = var.CLOUDFLARE_ACCOUNT_ID
-  name       = "newsletter-db"
+  title      = "newtab_kv"
 }
 
 # Pages 项目
@@ -30,9 +30,9 @@ resource "cloudflare_pages_project" "newsletter_app" {
 
   deployment_configs {
     production {
-      # D1 数据库绑定
-      d1_databases = {
-        DB = cloudflare_d1_database.newsletter_db.id
+      # KV 命名空间绑定
+      kv_namespaces = {
+        NEWTAB_KV = cloudflare_workers_kv_namespace.newtab_kv.id
       }
 
       compatibility_date  = "2024-12-18"
@@ -41,8 +41,8 @@ resource "cloudflare_pages_project" "newsletter_app" {
 
     preview {
       # 预览环境使用相同的绑定
-      d1_databases = {
-        DB = cloudflare_d1_database.newsletter_db.id
+      kv_namespaces = {
+        NEWTAB_KV = cloudflare_workers_kv_namespace.newtab_kv.id
       }
 
       compatibility_date  = "2024-12-18"
@@ -52,8 +52,8 @@ resource "cloudflare_pages_project" "newsletter_app" {
 }
 
 # 输出资源信息
-output "d1_database_id" {
-  value = cloudflare_d1_database.newsletter_db.id
+output "kv_namespace_id" {
+  value = cloudflare_workers_kv_namespace.newtab_kv.id
 }
 
 output "pages_project_url" {
