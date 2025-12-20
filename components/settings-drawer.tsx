@@ -15,6 +15,7 @@ import {
 } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { AccountSettings } from "./account-settings";
 
 interface SettingsDialogProps {
   children?: React.ReactNode;
@@ -111,7 +112,9 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange }: SettingsDialo
 
               {/* 右侧内容区域 */}
               <div className="flex-1 p-6 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                {children || (
+                {activeTab === 'account' ? (
+                  <AccountSettings />
+                ) : (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center text-white/60">
                       <div className="text-lg font-medium mb-2">
