@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 
 interface SettingsDialogProps {
   children?: React.ReactNode;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // 导航项配置
@@ -34,28 +36,10 @@ const navigationItems = [
   { id: 'about', label: '关于', icon: InfoCircledIcon },
 ];
 
-export const SettingsDialog = ({ children }: SettingsDialogProps) => {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+export const SettingsDialog = ({ children, isOpen, onOpenChange }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState('account');
-  const [showGearButton, setShowGearButton] = useState(false);
-
-  // 监听鼠标位置，判断是否在右上角区域
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const { clientX, clientY } = e;
-      const { innerWidth, innerHeight } = window;
-      
-      // 右上角区域：右边100px，上边100px
-      const isInTopRightCorner = 
-        clientX > innerWidth - 100 && 
-        clientY < 100;
-      
-      setShowGearButton(isInTopRightCorner || isDialogOpen);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    return () => document.removeEventListener('mousemove', handleMouseMove);
-  }, [isDialogOpen]);
+  const isDialogOpen = isOpen ?? false;
+  const setIsDialogOpen = onOpenChange ?? (() => {});
 
   // 阻止对话框内的点击事件冒泡
   const handleDialogClick = (e: React.MouseEvent) => {
@@ -64,31 +48,6 @@ export const SettingsDialog = ({ children }: SettingsDialogProps) => {
 
   return (
     <>
-      {/* 齿轮按钮 */}
-      <AnimatePresence>
-        {showGearButton && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8, x: 20 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            exit={{ opacity: 0, scale: 0.8, x: 20 }}
-            transition={{ duration: 0.2 }}
-            className="fixed top-4 right-4 z-50"
-          >
-            <button
-              onClick={() => setIsDialogOpen(true)}
-              className={cn(
-                "w-12 h-12 rounded-full backdrop-blur-md border-2 border-white/30 transition-all duration-200",
-                "hover:border-white/50 hover:bg-white/10 active:scale-95",
-                "flex items-center justify-center text-white",
-                isDialogOpen && "bg-white/20 border-white/50"
-              )}
-            >
-              <GearIcon className="w-5 h-5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* 对话框遮罩 */}
       <AnimatePresence>
         {isDialogOpen && (
@@ -98,7 +57,7 @@ export const SettingsDialog = ({ children }: SettingsDialogProps) => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
             className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
-            onClick={() => setIsDialogOpen(false)}
+            onClick={() => setIsDialogOpen?.(false)}
           />
         )}
       </AnimatePresence>
@@ -118,7 +77,7 @@ export const SettingsDialog = ({ children }: SettingsDialogProps) => {
             <div className="flex items-center justify-between p-6 border-b border-white/20">
               <h2 className="text-xl font-semibold text-white">设置</h2>
               <button
-                onClick={() => setIsDialogOpen(false)}
+                onClick={() => setIsDialogOpen?.(false)}
                 className="w-8 h-8 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-white/80 hover:text-white"
               >
                 <Cross2Icon className="w-4 h-4" />

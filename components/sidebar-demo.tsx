@@ -4,7 +4,11 @@ import { useState } from "react";
 import { CustomSidebar, type SidebarItem } from "./custom-sidebar";
 import { toast } from "sonner";
 
-export const SidebarDemo = () => {
+interface SidebarDemoProps {
+  onAvatarClick?: () => void;
+}
+
+export const SidebarDemo = ({ onAvatarClick }: SidebarDemoProps) => {
   const [items, setItems] = useState<SidebarItem[]>([
     { 
       id: "1", 
@@ -39,6 +43,7 @@ export const SidebarDemo = () => {
     <CustomSidebar 
       items={items} 
       onItemsChange={handleItemsChange}
+      onAvatarClick={onAvatarClick}
     />
   );
 };

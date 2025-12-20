@@ -46,6 +46,7 @@ export interface SidebarItem {
 interface CustomSidebarProps {
   items?: SidebarItem[];
   onItemsChange?: (items: SidebarItem[]) => void;
+  onAvatarClick?: () => void;
   className?: string;
 }
 
@@ -58,6 +59,7 @@ const defaultItems: SidebarItem[] = [
 export const CustomSidebar = ({ 
   items = defaultItems, 
   onItemsChange,
+  onAvatarClick,
   className 
 }: CustomSidebarProps) => {
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>(items);
@@ -144,8 +146,22 @@ export const CustomSidebar = ({
         className
       )}
     >
+      {/* 头像图标 - 固定在顶部 */}
+      <div className="w-full flex items-center justify-center py-4 border-b border-white/20">
+        <button
+          onClick={onAvatarClick}
+          className={cn(
+            "w-10 h-10 rounded-full bg-primary/20 backdrop-blur-xs",
+            "flex items-center justify-center text-white group",
+            "transition-all duration-200"
+          )}
+        >
+          <PersonIcon className="w-5 h-5 transition-transform duration-200 ease-out group-hover:scale-110" />
+        </button>
+      </div>
+
       {/* 侧边栏项目 */}
-      <div className="flex flex-col flex-1 w-full overflow-y-auto pt-6 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="flex flex-col flex-1 w-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <AnimatePresence>
           {sidebarItems.map((item, index) => {
             const IconComponent = availableIcons[item.icon];
