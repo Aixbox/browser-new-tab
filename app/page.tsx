@@ -5,7 +5,7 @@ import { Background } from "@/components/background";
 import { SidebarDemo } from "@/components/sidebar-demo";
 import { SearchEngine } from "@/components/search-engine";
 import { SimpleTimeDisplay } from "@/components/simple-time-display";
-import { DraggableSearchGrid } from "@/components/draggable-search-grid";
+import { DraggableGrid } from "@/components/draggable-grid";
 import { SettingsDialog } from "@/components/settings-drawer";
 
 export default function Home() {
@@ -19,7 +19,7 @@ export default function Home() {
         <div className="p-inset h-full w-full relative pl-16 flex flex-col items-center justify-center gap-8">
           <SimpleTimeDisplay />
           <SearchEngine />
-          <DraggableSearchGrid />
+          <DraggableGrid />
         </div>
         
         {/* 设置对话框 */}
