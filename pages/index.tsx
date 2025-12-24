@@ -9,7 +9,9 @@ import { DraggableGrid } from "@/components/draggable-grid";
 import { SettingsDialog } from "@/components/settings-drawer";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
-export const runtime = 'experimental-edge';
+export const config = {
+  runtime: 'experimental-edge',
+};
 
 interface HomeProps {
   avatarUrl: string | null;

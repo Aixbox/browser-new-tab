@@ -91,6 +91,11 @@ jobs:
           echo "Applying Terraform configuration..."
           terraform apply -auto-approve -input=false
           
+          # 获取 KV Namespace ID 并验证
+          echo "Verifying KV namespace configuration..."
+          KV_ID=$(terraform output -raw kv_namespace_id)
+          echo "KV Namespace ID: $KV_ID"
+          
           # 等待项目创建完成
           echo "Waiting for Pages project to be ready..."
           sleep 10
@@ -102,9 +107,14 @@ jobs:
       - name: Deploy to Cloudflare Pages
         run: |
           echo "Deploying to Cloudflare Pages..."
+          # 删除可能存在的 wrangler.toml 文件（避免冲突）
+          rm -f .vercel/output/static/wrangler.toml || true
+          
           # 部署到生产环境 (master 分支自动部署到生产)
+          # Terraform 已经配置了 KV 绑定，wrangler 只需上传文件
           npx wrangler pages deploy .vercel/output/static \
             --project-name new-tab \
+            --branch master \
             --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

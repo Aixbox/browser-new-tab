@@ -1,6 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: NextRequest) {
   try {
     // 代理到 WorldTimeAPI
     const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Shanghai', {
@@ -16,9 +20,11 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     
     // 返回时间数据
-    return NextResponse.json(data, {
+    return new Response(JSON.stringify(data), {
+      status: 200,
       headers: {
-        'Cache-Control': 'public, max-age=60', // 缓存1分钟
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=60',
         'Access-Control-Allow-Origin': '*',
       },
     });
@@ -26,16 +32,16 @@ export async function GET(request: NextRequest) {
     console.error('Time API proxy error:', error);
     
     // 如果外部API失败，返回服务器时间
-    return NextResponse.json({
+    return new Response(JSON.stringify({
       datetime: new Date().toISOString(),
       timezone: 'Asia/Shanghai',
       fallback: true,
-    }, {
+    }), {
+      status: 200,
       headers: {
+        'Content-Type': 'application/json',
         'Cache-Control': 'public, max-age=30',
       },
     });
   }
 }
-
-export const runtime = 'edge';

@@ -1,33 +1,44 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
   const engine = searchParams.get('engine') || 'google';
 
   if (!query || query.trim().length < 2) {
-    return NextResponse.json([]);
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
     const suggestions = await getOnlineSuggestions(query, engine);
 
-    return NextResponse.json(suggestions, {
+    return new Response(JSON.stringify(suggestions), {
+      status: 200,
       headers: {
-        'Cache-Control': 'public, max-age=300', // 缓存5分钟
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
         'Access-Control-Allow-Origin': '*',
       },
     });
   } catch (error) {
     console.error('获取搜索建议失败:', error);
-    return NextResponse.json([]);
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
 
-// 获取在线建议
 async function getOnlineSuggestions(query: string, engine: string): Promise<string[]> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒超时
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
 
   try {
     let url = '';
@@ -59,7 +70,6 @@ async function getOnlineSuggestions(query: string, engine: string): Promise<stri
 
     const data = await response.json();
     
-    // Google 和 Bing 的响应格式不同
     if (Array.isArray(data) && data.length > 1) {
       return data[1] || [];
     } else if (data.suggestions) {
@@ -72,9 +82,3 @@ async function getOnlineSuggestions(query: string, engine: string): Promise<stri
     throw error;
   }
 }
-
-
-
-
-
-export const runtime = 'edge';

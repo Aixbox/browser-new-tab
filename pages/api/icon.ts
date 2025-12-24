@@ -1,11 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get('url');
 
   if (!url) {
-    return new NextResponse('Missing URL parameter', { status: 400 });
+    return new Response('Missing URL parameter', { status: 400 });
   }
 
   try {
@@ -23,7 +27,7 @@ export async function GET(request: NextRequest) {
     );
 
     if (!isValidIcon) {
-      return new NextResponse('Invalid icon URL', { status: 400 });
+      return new Response('Invalid icon URL', { status: 400 });
     }
 
     // 设置请求头，模拟浏览器请求
@@ -53,10 +57,10 @@ export async function GET(request: NextRequest) {
     const imageBuffer = await response.arrayBuffer();
     
     // 返回图片，设置适当的缓存头
-    return new NextResponse(imageBuffer, {
+    return new Response(imageBuffer, {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800', // 缓存1天，过期后1周内可用旧版本
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET',
         'Content-Length': imageBuffer.byteLength.toString(),
@@ -67,13 +71,11 @@ export async function GET(request: NextRequest) {
     console.error('Icon proxy error:', error);
     
     // 返回默认图标或错误
-    return new NextResponse('Icon not found', { 
+    return new Response('Icon not found', { 
       status: 404,
       headers: {
-        'Cache-Control': 'public, max-age=300', // 错误缓存5分钟
+        'Cache-Control': 'public, max-age=300',
       }
     });
   }
 }
-
-export const runtime = 'edge';
