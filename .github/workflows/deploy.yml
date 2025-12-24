@@ -59,19 +59,20 @@ jobs:
           echo "Account ID: $TF_VAR_CLOUDFLARE_ACCOUNT_ID"
           echo "Deploying Cloudflare infrastructure..."
           
-          # 检查并导入现有的 D1 数据库
-          echo "Checking for existing D1 database..."
-          D1_RESPONSE=$(curl -s "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/d1/database" \
-            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          # 检查并导入现有的 KV namespace
+          echo "Checking for existing KV namespace..."
+          KV_RESPONSE=$(curl -s "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/storage/kv/namespaces?per_page=100" \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header "Content-Type: application/json")
           
-          D1_ID=$(echo "$D1_RESPONSE" | jq -r '.result[]? | select(.name == "newsletter-db") | .uuid // empty')
+          KV_ID=$(echo "$KV_RESPONSE" | jq -r '.result[]? | select(.title == "newtab_kv") | .id // empty')
           
-          if [ -n "$D1_ID" ]; then
-            echo "Found existing D1 database: $D1_ID"
-            echo "Importing D1 database into Terraform state..."
-            terraform import cloudflare_d1_database.newsletter_db "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$D1_ID" || echo "D1 import failed or already imported, continuing..."
+          if [ -n "$KV_ID" ]; then
+            echo "Found existing KV namespace: $KV_ID"
+            echo "Importing KV namespace into Terraform state..."
+            terraform import cloudflare_workers_kv_namespace.newtab_kv "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$KV_ID" || echo "KV import failed or already imported, continuing..."
           else
-            echo "No existing D1 database found, will create new one"
+            echo "No existing KV namespace found, will create new one"
           fi
           
           # 检查并导入现有的 Pages 项目
