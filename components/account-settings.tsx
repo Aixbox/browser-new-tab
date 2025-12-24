@@ -133,7 +133,8 @@ export const AccountSettings = ({ initialAvatarUrl, hasSecretKey }: {
       }
     } catch (error) {
       console.error('Failed to save avatar:', error);
-      setMessage('保存失败');
+      const errorMessage = error instanceof Error ? error.message : '保存失败';
+      setMessage(errorMessage);
     } finally {
       setIsLoading(false);
     }

@@ -9,13 +9,17 @@ export async function getSetting(key: string) {
 }
 
 export async function setSetting(key: string, value: string) {
+  // 从 localStorage 获取密钥
+  const secret = localStorage.getItem('secret_key');
+  
   const response = await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'setSetting', key, value }),
+    body: JSON.stringify({ action: 'setSetting', key, value, secret }),
   });
   if (!response.ok) {
-    throw new Error('Failed to set setting');
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to set setting');
   }
   return response.json();
 }

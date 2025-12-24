@@ -16,6 +16,19 @@ function getKV() {
   return NEWTAB_KV;
 }
 
+// 验证密钥
+function verifySecret(secret: string | null): boolean {
+  const storedSecret = process.env.SECRET_KEY;
+  
+  // 如果没有设置密钥，允许访问
+  if (!storedSecret) {
+    return true;
+  }
+  
+  // 如果设置了密钥，必须验证
+  return secret === storedSecret;
+}
+
 export default async function handler(request: NextRequest) {
   const { method } = request;
   const url = new URL(request.url);
@@ -23,7 +36,7 @@ export default async function handler(request: NextRequest) {
   try {
     const KV = getKV();
 
-    // GET - 获取设置
+    // GET - 获取设置（不需要验证）
     if (method === 'GET') {
       const key = url.searchParams.get('key');
       
@@ -46,10 +59,18 @@ export default async function handler(request: NextRequest) {
       );
     }
 
-    // POST - 设置配置
+    // POST - 设置配置（需要验证）
     if (method === 'POST') {
       const body = await request.json();
-      const { action, key, value } = body;
+      const { action, key, value, secret } = body;
+
+      // 验证密钥
+      if (!verifySecret(secret)) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized', message: '密钥验证失败' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
 
       if (action === 'setSetting') {
         await KV.put(key, value);
