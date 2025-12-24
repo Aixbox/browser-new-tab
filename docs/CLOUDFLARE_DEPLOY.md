@@ -72,6 +72,108 @@ npm run preview
 - 创建本地模拟的 KV namespace
 - 通过 `getRequestContext()` 在 API 路由中访问
 
+## 密钥认证（可选）
+
+为了保护你的个性化设置（如头像、布局等），可以设置访问密钥。
+
+### 设置密钥
+
+#### 方法 1: 通过 Cloudflare Dashboard（推荐）
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 **Workers & Pages** → 选择你的项目 `new-tab`
+3. 进入 **Settings** → **Environment variables**
+4. 点击 **Add variable**：
+   - Variable name: `SECRET_KEY`
+   - Value: 你的密钥（建议使用 UUID）
+   - Environment: `Production` (或 `Preview` 用于测试)
+5. 点击 **Save**
+
+#### 方法 2: 通过命令行
+
+```bash
+# 设置环境变量
+wrangler pages secret put SECRET_KEY --project-name new-tab
+# 然后输入你的密钥（建议使用 UUID）
+```
+
+#### 如何生成 UUID 密钥
+
+**使用 Node.js:**
+```bash
+node -e "console.log(crypto.randomUUID());"
+```
+
+**使用在线工具:**
+- 访问 https://www.uuidgenerator.net/
+- 复制生成的 UUID
+
+**使用浏览器控制台:**
+```javascript
+crypto.randomUUID()
+```
+
+### 使用密钥
+
+- 首次访问网站时，会提示输入密钥
+- 输入正确的密钥后，会保存在浏览器 localStorage 中
+- 下次访问时会自动验证，无需重复输入
+- 如果更换浏览器或清除缓存，需要重新输入密钥
+
+### 修改密钥
+
+1. 生成新的 UUID 密钥
+2. 在 Cloudflare Dashboard 中更新 `SECRET_KEY` 环境变量
+3. 所有用户需要使用新密钥重新验证
+
+### 移除密钥保护
+
+在 Cloudflare Dashboard 中删除 `SECRET_KEY` 环境变量，或使用命令行：
+```bash
+wrangler pages secret delete SECRET_KEY --project-name new-tab
+```
+
+### 修改密钥
+
+1. 在 GitHub Secrets 中更新 `SECRET_KEY`
+2. 推送代码触发重新部署
+3. 所有用户需要使用新密钥重新验证
+
+### 手动配置密钥哈希
+
+如果不使用 GitHub Actions，可以手动在 Cloudflare Dashboard 中配置：
+
+1. 生成密钥的 SHA-256 哈希：
+   ```bash
+   # 使用 Node.js
+   node -e "const crypto = require('crypto'); console.log(crypto.createHash('sha256').update('your-secret-key').digest('hex'));"
+   
+   # 或使用 OpenSSL
+   echo -n "your-secret-key" | openssl dgst -sha256 -hex | cut -d' ' -f2
+   ```
+
+2. 在 Cloudflare Dashboard 中设置环境变量：
+   - 进入 Pages 项目 → Settings → Environment variables
+   - 添加变量：`SECRET_KEY_HASH` = `<生成的哈希值>`
+   - 选择环境：Production (和 Preview，如果需要)
+
+3. 或使用命令行：
+   ```bash
+   echo "your-hash-here" | wrangler pages secret put SECRET_KEY_HASH --project-name new-tab
+   ```
+
+### 移除密钥保护
+
+如果不需要密钥保护：
+1. 在 GitHub Secrets 中删除 `SECRET_KEY`
+2. 在 Cloudflare Dashboard 中删除环境变量：
+   - 进入 Pages 项目 → Settings → Environment variables
+   - 删除 `SECRET_KEY_HASH` 变量
+   - 或使用命令行：
+   ```bash
+   wrangler pages secret delete SECRET_KEY_HASH --project-name new-tab
+   ```
+
 ## 初始化 KV 存储
 
 首次部署后，KV namespace 会自动创建，无需手动初始化。

@@ -10,6 +10,7 @@ A modern, responsive landing page built with Next.js 15 and deployed on Cloudfla
 - 📱 **Responsive design**
 - ☁️ **Cloudflare Pages** deployment
 - 🗄️ **Workers KV** storage for user settings
+- 🔐 **Secret key authentication** for privacy protection
 - 🔧 **TypeScript** for type safety
 
 ## Quick Start
@@ -33,10 +34,22 @@ The project automatically deploys to Cloudflare Pages via GitHub Actions when yo
 
 **Setup:**
 1. Add `CLOUDFLARE_API_TOKEN` to your GitHub repository secrets
-2. Push to `master` branch
-3. Your site will be available at `https://new-tab.pages.dev`
+2. (Optional) Add `SECRET_KEY` to protect your personalized settings
+3. Push to `master` branch
+4. Your site will be available at `https://new-tab.pages.dev`
 
 For detailed deployment instructions, see [docs/CLOUDFLARE_DEPLOY.md](docs/CLOUDFLARE_DEPLOY.md).
+
+## Security
+
+This project uses GitHub Secrets-based authentication to protect your personalized settings:
+
+- Set `SECRET_KEY` in GitHub repository secrets
+- The key is hashed (SHA-256) and stored in Cloudflare KV
+- Users must enter the secret key to access personalized settings
+- The key is cached in browser localStorage after verification
+
+See [SECRET_AUTH_MIGRATION.md](SECRET_AUTH_MIGRATION.md) for detailed information.
 
 ## Project Structure
 

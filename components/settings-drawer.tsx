@@ -22,7 +22,6 @@ interface SettingsDialogProps {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   initialAvatarUrl?: string | null;
-  hasSecretKey?: boolean;
 }
 
 // 导航项配置
@@ -38,7 +37,7 @@ const navigationItems = [
   { id: 'about', label: '关于', icon: InfoCircledIcon },
 ];
 
-export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUrl, hasSecretKey }: SettingsDialogProps) => {
+export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUrl }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState('account');
   const isDialogOpen = isOpen ?? false;
   const setIsDialogOpen = onOpenChange ?? (() => {});
@@ -117,7 +116,6 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUr
                 {activeTab === 'account' ? (
                   <AccountSettings 
                     initialAvatarUrl={initialAvatarUrl}
-                    hasSecretKey={hasSecretKey}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center">
