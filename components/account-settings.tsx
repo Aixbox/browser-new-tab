@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
-import { PersonIcon } from "@radix-ui/react-icons";
+import { PersonIcon, LockClosedIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
 import { setSetting } from "@/lib/settings-api";
 
@@ -42,13 +42,81 @@ const Avatar = ({ src, alt }: { src: string; alt: string }) => {
   );
 };
 
-export const AccountSettings = ({ initialAvatarUrl }: { 
+export const AccountSettings = ({ initialAvatarUrl, hasSecretKey }: { 
   initialAvatarUrl?: string | null;
+  hasSecretKey?: boolean;
 }) => {
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl || '');
   const [tempAvatarUrl, setTempAvatarUrl] = useState(initialAvatarUrl || '');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [isVerified, setIsVerified] = useState(false);
+  const [secretInput, setSecretInput] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  // 检查是否已验证
+  useEffect(() => {
+    if (!hasSecretKey) {
+      setIsVerified(true);
+      return;
+    }
+
+    const checkSecret = async () => {
+      const storedSecret = localStorage.getItem('secret_key');
+      if (storedSecret) {
+        try {
+          const response = await fetch('/api/verify-secret', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secret: storedSecret }),
+          });
+
+          if (response.ok) {
+            const data = await response.json() as { verified?: boolean };
+            if (data.verified) {
+              setIsVerified(true);
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Failed to verify stored secret:', error);
+        }
+      }
+    };
+
+    checkSecret();
+  }, [hasSecretKey]);
+
+  const handleVerifySecret = async () => {
+    setIsVerifying(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/verify-secret', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: secretInput }),
+      });
+
+      if (response.ok) {
+        const data = await response.json() as { verified?: boolean };
+        if (data.verified) {
+          localStorage.setItem('secret_key', secretInput);
+          setIsVerified(true);
+          setMessage('验证成功');
+          setTimeout(() => setMessage(''), 2000);
+        } else {
+          setMessage('密钥错误');
+        }
+      } else {
+        setMessage('验证失败');
+      }
+    } catch (error) {
+      console.error('Failed to verify secret:', error);
+      setMessage('验证失败');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   const handleSaveAvatar = async () => {
     setIsLoading(true);
@@ -70,6 +138,46 @@ export const AccountSettings = ({ initialAvatarUrl }: {
       setIsLoading(false);
     }
   };
+
+  // 如果需要密钥但未验证，显示密钥输入界面
+  if (hasSecretKey && !isVerified) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 text-white/80">
+          <LockClosedIcon className="w-5 h-5" />
+          <h3 className="text-lg font-semibold">需要验证</h3>
+        </div>
+        <p className="text-white/60 text-sm">
+          此功能需要密钥验证才能使用。请输入密钥以继续。
+        </p>
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="secret" className="text-white">密钥</Label>
+            <Input
+              id="secret"
+              type="password"
+              placeholder="请输入密钥"
+              value={secretInput}
+              onChange={(e) => setSecretInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleVerifySecret()}
+              className="mt-1"
+            />
+          </div>
+          <Button onClick={handleVerifySecret} disabled={isVerifying || !secretInput}>
+            {isVerifying ? '验证中...' : '验证'}
+          </Button>
+        </div>
+        {message && (
+          <div className={cn(
+            "text-sm p-3 rounded-lg",
+            message.includes('成功') ? "bg-green-500/20 text-green-200" : "bg-red-500/20 text-red-200"
+          )}>
+            {message}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
