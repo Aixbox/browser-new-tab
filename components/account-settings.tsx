@@ -13,6 +13,12 @@ const Avatar = ({ src, alt }: { src: string; alt: string }) => {
   const [hasError, setHasError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
 
+  // 当 src 改变时重置状态
+  useEffect(() => {
+    setHasError(false);
+    setUseProxy(false);
+  }, [src]);
+
   const handleError = () => {
     if (!useProxy && src) {
       setUseProxy(true);
@@ -34,6 +40,7 @@ const Avatar = ({ src, alt }: { src: string; alt: string }) => {
 
   return (
     <img 
+      key={useProxy ? 'proxy' : 'direct'}
       src={imageUrl}
       alt={alt}
       className="w-24 h-24 rounded-full object-cover"

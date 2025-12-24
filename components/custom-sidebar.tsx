@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
@@ -71,6 +71,14 @@ export const CustomSidebar = ({
   const [editingItem, setEditingItem] = useState<SidebarItem | null>(null);
   const [newItemTitle, setNewItemTitle] = useState("");
   const [newItemIcon, setNewItemIcon] = useState<keyof typeof availableIcons>("home");
+  const [avatarError, setAvatarError] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
+
+  // 当 avatarUrl 改变时重置错误状态
+  useEffect(() => {
+    setAvatarError(false);
+    setUseProxy(false);
+  }, [avatarUrl]);
 
   const handleAddItem = () => {
     if (!newItemTitle.trim()) return;
@@ -109,6 +117,17 @@ export const CustomSidebar = ({
     // 选中项目
     setSelectedItemId(item.id);
     item.onClick?.();
+  };
+
+  const handleAvatarError = () => {
+    if (!useProxy && avatarUrl) {
+      // 第一次失败，尝试使用代理
+      setUseProxy(true);
+      setAvatarError(false);
+    } else {
+      // 代理也失败了，显示默认图标
+      setAvatarError(true);
+    }
   };
 
   const handleEditItem = (item: SidebarItem) => {
@@ -158,22 +177,17 @@ export const CustomSidebar = ({
             "transition-all duration-200 overflow-hidden"
           )}
         >
-          {avatarUrl ? (
+          {avatarUrl && !avatarError ? (
             <img 
-              src={avatarUrl} 
+              key={useProxy ? 'proxy' : 'direct'}
+              src={useProxy ? `/api/icon?url=${encodeURIComponent(avatarUrl)}` : avatarUrl}
               alt="Avatar" 
               className="w-full h-full object-cover"
-              onError={(e) => {
-                // 如果图片加载失败，显示默认图标
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
-              }}
+              onError={handleAvatarError}
             />
-          ) : null}
-          <PersonIcon className={cn(
-            "w-5 h-5 transition-transform duration-200 ease-out group-hover:scale-110",
-            avatarUrl && "hidden"
-          )} />
+          ) : (
+            <PersonIcon className="w-5 h-5 transition-transform duration-200 ease-out group-hover:scale-110" />
+          )}
         </button>
       </div>
 

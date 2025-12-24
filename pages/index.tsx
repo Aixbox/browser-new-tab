@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Head from "next/head";
 import { KVNamespace } from '@cloudflare/workers-types';
 import { Background } from "@/components/background";
@@ -7,6 +7,7 @@ import { SearchEngine } from "@/components/search-engine";
 import { SimpleTimeDisplay } from "@/components/simple-time-display";
 import { DraggableGrid } from "@/components/draggable-grid";
 import { SettingsDialog } from "@/components/settings-drawer";
+import { SidebarItem } from "@/components/custom-sidebar";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
 export const config = {
@@ -16,9 +17,10 @@ export const config = {
 interface HomeProps {
   avatarUrl: string | null;
   hasSecretKey: boolean;
+  sidebarItems: SidebarItem[] | null;
 }
 
-export default function Home({ avatarUrl, hasSecretKey }: HomeProps) {
+export default function Home({ avatarUrl, hasSecretKey, sidebarItems }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
@@ -37,6 +39,7 @@ export default function Home({ avatarUrl, hasSecretKey }: HomeProps) {
           <SidebarDemo 
             onAvatarClick={() => setIsSettingsOpen(true)}
             avatarUrl={avatarUrl}
+            initialSidebarItems={sidebarItems}
           />
           <div className="p-inset h-full w-full relative pl-16 flex flex-col items-center justify-center gap-8">
             <SimpleTimeDisplay />
@@ -65,12 +68,17 @@ export async function getServerSideProps() {
   };
 
   let avatarUrl: string | null = null;
+  let sidebarItems: SidebarItem[] | null = null;
   const hasSecretKey = !!SECRET_KEY;
 
   try {
-    // 从 KV 读取头像 URL
+    // 从 KV 读取数据
     if (NEWTAB_KV) {
       avatarUrl = await NEWTAB_KV.get('avatar_url');
+      const sidebarItemsStr = await NEWTAB_KV.get('sidebar_items');
+      if (sidebarItemsStr) {
+        sidebarItems = JSON.parse(sidebarItemsStr);
+      }
     }
   } catch (error) {
     console.error('Failed to load settings from KV:', error);
@@ -80,6 +88,7 @@ export async function getServerSideProps() {
     props: {
       avatarUrl,
       hasSecretKey,
+      sidebarItems,
     },
   };
 }
