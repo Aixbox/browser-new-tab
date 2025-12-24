@@ -47,6 +47,7 @@ interface CustomSidebarProps {
   items?: SidebarItem[];
   onItemsChange?: (items: SidebarItem[]) => void;
   onAvatarClick?: () => void;
+  avatarUrl?: string | null;
   className?: string;
 }
 
@@ -60,6 +61,7 @@ export const CustomSidebar = ({
   items = defaultItems, 
   onItemsChange,
   onAvatarClick,
+  avatarUrl,
   className 
 }: CustomSidebarProps) => {
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>(items);
@@ -153,10 +155,25 @@ export const CustomSidebar = ({
           className={cn(
             "w-10 h-10 rounded-full bg-primary/20 backdrop-blur-xs",
             "flex items-center justify-center text-white group",
-            "transition-all duration-200"
+            "transition-all duration-200 overflow-hidden"
           )}
         >
-          <PersonIcon className="w-5 h-5 transition-transform duration-200 ease-out group-hover:scale-110" />
+          {avatarUrl ? (
+            <img 
+              src={avatarUrl} 
+              alt="Avatar" 
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // 如果图片加载失败，显示默认图标
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+          ) : null}
+          <PersonIcon className={cn(
+            "w-5 h-5 transition-transform duration-200 ease-out group-hover:scale-110",
+            avatarUrl && "hidden"
+          )} />
         </button>
       </div>
 

@@ -6,7 +6,7 @@ import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import { PersonIcon, EyeOpenIcon, EyeNoneIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
-import { getSetting, setSetting, verifySecret, setSecret } from "@/app/actions/settings";
+import { getSetting, setSetting, verifySecret, setSecret } from "@/lib/settings-api";
 
 // 头像组件 - 支持失败后使用代理
 const Avatar = ({ src, alt }: { src: string; alt: string }) => {
@@ -42,15 +42,18 @@ const Avatar = ({ src, alt }: { src: string; alt: string }) => {
   );
 };
 
-export const AccountSettings = () => {
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [tempAvatarUrl, setTempAvatarUrl] = useState('');
+export const AccountSettings = ({ initialAvatarUrl, hasSecretKey: initialHasSecretKey }: { 
+  initialAvatarUrl?: string | null;
+  hasSecretKey?: boolean;
+}) => {
+  const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl || '');
+  const [tempAvatarUrl, setTempAvatarUrl] = useState(initialAvatarUrl || '');
   const [secretKey, setSecretKey] = useState('');
   const [currentSecret, setCurrentSecret] = useState('');
   const [newSecret, setNewSecret] = useState('');
   const [confirmSecret, setConfirmSecret] = useState('');
   const [showSecret, setShowSecret] = useState(false);
-  const [isFirstTime, setIsFirstTime] = useState(true);
+  const [isFirstTime, setIsFirstTime] = useState(!initialHasSecretKey);
   const [isVerified, setIsVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -61,20 +64,9 @@ export const AccountSettings = () => {
     if (savedSecret) {
       setSecretKey(savedSecret);
       verifySecretKey(savedSecret);
-    } else {
-      checkIfFirstTime();
     }
-    loadAvatar();
+    // 不再需要 loadAvatar，因为已经从 SSR 获取
   }, []);
-
-  const checkIfFirstTime = async () => {
-    try {
-      const data = await getSetting('secret_key_hash');
-      setIsFirstTime(!data.exists);
-    } catch (error) {
-      console.error('Failed to check secret key:', error);
-    }
-  };
 
   const verifySecretKey = async (secret: string) => {
     try {
@@ -88,18 +80,6 @@ export const AccountSettings = () => {
     }
   };
 
-  const loadAvatar = async () => {
-    try {
-      const data = await getSetting('avatar_url');
-      if (data.value) {
-        setAvatarUrl(data.value);
-        setTempAvatarUrl(data.value);
-      }
-    } catch (error) {
-      console.error('Failed to load avatar:', error);
-    }
-  };
-
   const handleSaveAvatar = async () => {
     setIsLoading(true);
     setMessage('');
@@ -108,7 +88,7 @@ export const AccountSettings = () => {
 
       if (result.success) {
         setAvatarUrl(tempAvatarUrl);
-        setMessage('头像已保存');
+        setMessage('头像已保存，刷新页面后生效');
         setTimeout(() => setMessage(''), 3000);
       } else {
         setMessage('保存失败');

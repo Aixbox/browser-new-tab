@@ -23,6 +23,7 @@ yarn-error.log*
 
 # cloudflare
 .wrangler
+.dev.vars
 
 # terraform
 .terraform/

@@ -1,4 +1,6 @@
+/** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -10,20 +12,16 @@ const nextConfig = {
   },
 };
 
-// Cloudflare Pages 本地开发环境支持
-if (process.env.NODE_ENV === 'development' && process.env.ENABLE_CLOUDFLARE_DEV === 'true') {
-  const { setupDevPlatform } = await import('@cloudflare/next-on-pages/next-dev');
+// Cloudflare Pages 本地开发环境支持（对齐 UptimeFlare 方式）
+if (process.env.NODE_ENV === 'development') {
+  const { setupDevBindings } = await import('@cloudflare/next-on-pages/next-dev');
   
-  // 配置本地开发平台绑定
-  await setupDevPlatform({
+  setupDevBindings({
     bindings: {
       NEWTAB_KV: {
         type: 'kv',
-        id: 'local-kv',
+        id: 'NEWTAB_KV',
       },
-    },
-    persist: {
-      path: '.wrangler/state/v3',
     },
   });
 }

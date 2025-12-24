@@ -9,10 +9,16 @@ interface TimeData {
 }
 
 export const SimpleTimeDisplay = () => {
+  const [mounted, setMounted] = useState(false);
   const [timeData, setTimeData] = useState<TimeData>({
     currentTime: new Date(),
     lunarCalendar: ""
   });
+
+  // 防止 hydration 错误：只在客户端挂载后才显示时间
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // 获取农历信息
   const getLunarInfo = (date: Date) => {
@@ -112,6 +118,22 @@ export const SimpleTimeDisplay = () => {
   };
 
   const { time, date, weekday } = formatTime(timeData.currentTime);
+
+  // 在服务端渲染时显示占位符，避免 hydration 错误
+  if (!mounted) {
+    return (
+      <div className="text-center text-white">
+        {/* 占位符，与实际内容结构相同 */}
+        <div className="text-6xl font-mono font-light tracking-wider mb-2">
+          --:--:--
+        </div>
+        <div className="text-lg text-white/90 space-x-4">
+          <span>--月--日</span>
+          <span>---</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="text-center text-white">

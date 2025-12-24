@@ -6,9 +6,10 @@ import { toast } from "sonner";
 
 interface SidebarDemoProps {
   onAvatarClick?: () => void;
+  avatarUrl?: string | null;
 }
 
-export const SidebarDemo = ({ onAvatarClick }: SidebarDemoProps) => {
+export const SidebarDemo = ({ onAvatarClick, avatarUrl }: SidebarDemoProps) => {
   const [items, setItems] = useState<SidebarItem[]>([
     { 
       id: "1", 
@@ -44,6 +45,7 @@ export const SidebarDemo = ({ onAvatarClick }: SidebarDemoProps) => {
       items={items} 
       onItemsChange={handleItemsChange}
       onAvatarClick={onAvatarClick}
+      avatarUrl={avatarUrl}
     />
   );
 };
