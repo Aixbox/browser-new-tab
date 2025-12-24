@@ -4,21 +4,19 @@ import { getRequestContext } from '@cloudflare/next-on-pages';
 // 必须使用 Edge Runtime 才能访问 Cloudflare 绑定
 export const runtime = 'edge';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    // 获取 Cloudflare 环境（包含 D1 和 R2 绑定）
+    // 获取 Cloudflare 环境（包含 KV 绑定）
     const { env } = getRequestContext();
 
-    // 示例：查询 D1 数据库
-    const dbResult = await env.DB.prepare(
-      'SELECT COUNT(*) as count FROM subscribers'
-    ).first();
+    // 示例：从 KV 读取数据
+    const exampleValue = await env.NEWTAB_KV.get('example-key');
 
     return Response.json({
       success: true,
       data: {
-        subscriberCount: dbResult?.count || 0,
-        message: 'Successfully connected to D1!',
+        exampleValue: exampleValue || 'No value found',
+        message: 'Successfully connected to KV!',
       },
     });
   } catch (error) {

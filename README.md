@@ -9,7 +9,7 @@ A modern, responsive landing page built with Next.js 15 and deployed on Cloudfla
 - 🌙 **Dark/Light mode** support
 - 📱 **Responsive design**
 - ☁️ **Cloudflare Pages** deployment
-- 🗄️ **D1 Database** integration
+- 🗄️ **Workers KV** storage for user settings
 - 🔧 **TypeScript** for type safety
 
 ## Quick Start
@@ -54,6 +54,6 @@ For detailed deployment instructions, see [docs/CLOUDFLARE_DEPLOY.md](docs/CLOUD
 - **Framework**: Next.js 15
 - **Styling**: Tailwind CSS 4
 - **UI Components**: Radix UI + shadcn/ui
-- **Database**: Cloudflare D1
+- **Storage**: Cloudflare Workers KV
 - **Deployment**: Cloudflare Pages
 - **CI/CD**: GitHub Actions + Terraform

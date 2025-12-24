@@ -2,8 +2,8 @@
 
 declare global {
   interface CloudflareEnv {
-    // D1 数据库
-    DB: D1Database;
+    // KV 命名空间
+    NEWTAB_KV: KVNamespace;
   }
 }
 
