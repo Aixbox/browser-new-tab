@@ -116,3 +116,42 @@
   border: 2px solid white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
+
+/* 自定义滑块样式 */
+input[type="range"].slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  outline: none;
+}
+
+input[type="range"].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+input[type="range"].slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+input[type="range"].slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+input[type="range"].slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+}

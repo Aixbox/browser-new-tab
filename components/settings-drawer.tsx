@@ -18,15 +18,16 @@ import { cn } from "@/lib/utils";
 import { AccountSettings } from "./account-settings";
 import { OpenMethodSettings } from "./open-method-settings";
 import { LayoutSettings } from "./layout-settings";
+import { IconSettings, type IconStyleSettings } from "./icon-settings";
 
 interface SettingsDialogProps {
-  children?: React.ReactNode;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   initialAvatarUrl?: string | null;
   hasSecretKey?: boolean;
   initialOpenInNewTab?: { search?: boolean; icon?: boolean };
   initialLayoutMode?: 'component' | 'minimal';
+  initialIconStyle?: IconStyleSettings;
 }
 
 // 导航项配置
@@ -42,10 +43,13 @@ const navigationItems = [
   { id: 'about', label: '关于', icon: InfoCircledIcon },
 ];
 
-export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUrl, hasSecretKey, initialOpenInNewTab, initialLayoutMode }: SettingsDialogProps) => {
+export const SettingsDialog = ({ isOpen, onOpenChange, initialAvatarUrl, hasSecretKey, initialOpenInNewTab, initialLayoutMode, initialIconStyle }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState('account');
   const isDialogOpen = isOpen ?? false;
   const setIsDialogOpen = onOpenChange ?? (() => {});
+
+  // 判断是否在图标设置页面
+  const isIconSettings = activeTab === 'icons';
 
   // 阻止对话框内的点击事件冒泡
   const handleDialogClick = (e: React.MouseEvent) => {
@@ -54,9 +58,9 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUr
 
   return (
     <>
-      {/* 对话框遮罩 */}
+      {/* 对话框遮罩 - 图标设置时不显示 */}
       <AnimatePresence>
-        {isDialogOpen && (
+        {isDialogOpen && !isIconSettings && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -68,15 +72,23 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUr
         )}
       </AnimatePresence>
 
-      {/* 中间对话框 */}
+      {/* 对话框 */}
       <AnimatePresence>
         {isDialogOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ 
+              opacity: 1, 
+              scale: 1,
+            }}
+            exit={{ opacity: 0, scale: 0.9 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] max-w-[90vw] h-[600px] max-h-[80vh] bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-xl z-50 shadow-2xl flex flex-col overflow-hidden"
+            className={cn(
+              "fixed w-[800px] max-w-[90vw] h-[600px] max-h-[80vh] bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-xl z-50 shadow-2xl flex flex-col overflow-hidden transition-all duration-300",
+              isIconSettings 
+                ? "bottom-8 right-8" 
+                : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            )}
             onClick={handleDialogClick}
           >
             {/* 对话框头部 */}
@@ -127,6 +139,11 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUr
                   <OpenMethodSettings 
                     hasSecretKey={hasSecretKey}
                     initialOpenInNewTab={initialOpenInNewTab}
+                  />
+                ) : activeTab === 'icons' ? (
+                  <IconSettings 
+                    hasSecretKey={hasSecretKey}
+                    initialIconStyle={initialIconStyle}
                   />
                 ) : activeTab === 'layout' ? (
                   <LayoutSettings 

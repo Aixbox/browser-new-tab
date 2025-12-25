@@ -30,7 +30,12 @@ import { Button } from "./ui/button";
 import * as Portal from "@radix-ui/react-portal";
 
 // 图标加载组件 - 支持失败后使用代理
-const IconImage = ({ src, alt, className }: { src: string; alt: string; className: string }) => {
+const IconImage = ({ src, alt, className, style }: { 
+  src: string; 
+  alt: string; 
+  className?: string;
+  style?: React.CSSProperties;
+}) => {
   const [hasError, setHasError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
 
@@ -45,7 +50,7 @@ const IconImage = ({ src, alt, className }: { src: string; alt: string; classNam
 
   if (hasError) {
     return (
-      <div className={cn("flex items-center justify-center bg-white/5", className)}>
+      <div className={cn("flex items-center justify-center bg-white/5", className)} style={style}>
         <GlobeIcon className="w-6 h-6 text-white" />
       </div>
     );
@@ -58,6 +63,7 @@ const IconImage = ({ src, alt, className }: { src: string; alt: string; classNam
       src={imageUrl}
       alt={alt}
       className={className}
+      style={style}
       onError={handleError}
     />
   );
@@ -113,9 +119,10 @@ interface IconItem {
 }
 
 // 可拖拽的图标项
-const DraggableItem = ({ item, openInNewTab }: { 
+const DraggableItem = ({ item, openInNewTab, iconStyle }: { 
   item: IconItem;
   openInNewTab: boolean;
+  iconStyle?: { size: number; borderRadius: number; opacity: number };
 }) => {
   const {
     attributes,
@@ -133,8 +140,30 @@ const DraggableItem = ({ item, openInNewTab }: {
   };
 
   const renderIcon = () => {
+    const iconSize = iconStyle?.size || 80;
+    const borderRadius = iconStyle?.borderRadius || 12;
+    const opacity = (iconStyle?.opacity || 100) / 100;
+
+    const iconStyle_css = {
+      width: `${iconSize}px`,
+      height: `${iconSize}px`,
+      borderRadius: `${borderRadius}px`,
+      opacity: opacity,
+    };
+
     if (item.iconType === 'text' && item.iconText && item.iconColor) {
-      return <TextIcon text={item.iconText} color={item.iconColor} size="small" />;
+      return (
+        <div 
+          className="flex items-center justify-center text-white font-semibold overflow-hidden transition-all duration-200"
+          style={{
+            ...iconStyle_css,
+            backgroundColor: item.iconColor,
+            fontSize: `${iconSize / 4}px`,
+          }}
+        >
+          {item.iconText}
+        </div>
+      );
     }
 
     if (item.iconType === 'image' && item.iconImage) {
@@ -142,7 +171,8 @@ const DraggableItem = ({ item, openInNewTab }: {
         <IconImage 
           src={item.iconImage}
           alt={item.name}
-          className="w-12 h-12 rounded-lg object-cover"
+          className="object-cover transition-all duration-200"
+          style={iconStyle_css}
         />
       );
     }
@@ -152,13 +182,17 @@ const DraggableItem = ({ item, openInNewTab }: {
         <IconImage 
           src={item.iconLogo}
           alt={item.name}
-          className="w-12 h-12 rounded-lg object-contain"
+          className="object-contain transition-all duration-200"
+          style={iconStyle_css}
         />
       );
     }
 
     return (
-      <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-white/5">
+      <div 
+        className="flex items-center justify-center bg-white/5 transition-all duration-200"
+        style={iconStyle_css}
+      >
         <GlobeIcon className="w-6 h-6 text-white" />
       </div>
     );
@@ -168,6 +202,10 @@ const DraggableItem = ({ item, openInNewTab }: {
     const target = openInNewTab ? '_blank' : '_self';
     window.open(item.url, target);
   };
+
+  const showName = iconStyle?.showName ?? true;
+  const nameSize = iconStyle?.nameSize ?? 12;
+  const nameColor = iconStyle?.nameColor ?? '#ffffff';
 
   return (
     <div
@@ -179,21 +217,35 @@ const DraggableItem = ({ item, openInNewTab }: {
       onClick={handleClick}
     >
       {renderIcon()}
-      <span className="text-xs text-white/90 text-center font-medium leading-tight max-w-full truncate">
-        {item.name}
-      </span>
+      {showName && (
+        <span 
+          className="text-center font-medium leading-tight max-w-full truncate"
+          style={{
+            fontSize: `${nameSize}px`,
+            color: nameColor,
+          }}
+        >
+          {item.name}
+        </span>
+      )}
     </div>
   );
 };
 
 // 添加新图标的占位符
-const AddIconItem = ({ onClick }: { onClick: () => void }) => {
+const AddIconItem = ({ onClick, iconSize = 80 }: { onClick: () => void; iconSize?: number }) => {
   return (
     <div
       className="flex flex-col items-center gap-2 p-2 rounded-xl cursor-pointer hover:bg-white/10 transition-colors border-2 border-dashed border-white/30 hover:border-white/50"
       onClick={onClick}
     >
-      <div className="w-12 h-12 flex items-center justify-center rounded-lg">
+      <div 
+        className="flex items-center justify-center rounded-lg"
+        style={{
+          width: `${iconSize}px`,
+          height: `${iconSize}px`,
+        }}
+      >
         <PlusIcon className="w-6 h-6 text-white/60" />
       </div>
       <span className="text-xs text-white/60 text-center font-medium">
@@ -203,7 +255,10 @@ const AddIconItem = ({ onClick }: { onClick: () => void }) => {
   );
 };
 
-export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true }: { openInNewTab?: boolean }) => {
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle }: { 
+  openInNewTab?: boolean;
+  iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
+}) => {
   const [items, setItems] = useState<IconItem[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -440,24 +495,35 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true }: { op
     );
   };
 
+  const iconSize = iconStyle?.size || 80;
+  const iconSpacing = iconStyle?.spacing ?? 16;
+  const gridMinSize = iconSize + 40; // 图标大小 + 额外空间（padding + 文字）
+
   return (
     <>
-      <div className="w-full max-w-2xl">
+      <div className="w-full">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={items} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-4">
+            <div 
+              className="grid w-full"
+              style={{
+                gridTemplateColumns: `repeat(auto-fill, minmax(${gridMinSize}px, 1fr))`,
+                gap: `${iconSpacing}px`
+              }}
+            >
               {items.map((item) => (
                 <DraggableItem
                   key={item.id}
                   item={item}
                   openInNewTab={openInNewTab}
+                  iconStyle={iconStyle}
                 />
               ))}
-              <AddIconItem onClick={() => setIsDialogOpen(true)} />
+              <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} />
             </div>
           </SortableContext>
         </DndContext>

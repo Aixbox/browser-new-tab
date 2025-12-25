@@ -9,6 +9,7 @@ import { DraggableGrid } from "@/components/draggable-grid";
 import { SettingsDialog } from "@/components/settings-drawer";
 import { SidebarItem } from "@/components/custom-sidebar";
 import { GearIcon } from "@radix-ui/react-icons";
+import type { IconStyleSettings } from "@/components/icon-settings";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
 export const config = {
@@ -21,12 +22,14 @@ interface HomeProps {
   sidebarItems: SidebarItem[] | null;
   openInNewTab: { search: boolean; icon: boolean };
   layoutMode: 'component' | 'minimal';
+  iconStyle: IconStyleSettings;
 }
 
-export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode }: HomeProps) {
+export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentLayoutMode, setCurrentLayoutMode] = useState<'component' | 'minimal'>(layoutMode);
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [currentIconStyle, setCurrentIconStyle] = useState<IconStyleSettings>(iconStyle);
 
   // 监听布局模式变化
   useEffect(() => {
@@ -38,6 +41,18 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     
     window.addEventListener('layoutModeChanged', handleLayoutModeChange as EventListener);
     return () => window.removeEventListener('layoutModeChanged', handleLayoutModeChange as EventListener);
+  }, []);
+
+  // 监听图标样式变化
+  useEffect(() => {
+    const handleIconStyleChange = (e: CustomEvent) => {
+      if (e.detail) {
+        setCurrentIconStyle(e.detail);
+      }
+    };
+    
+    window.addEventListener('iconStyleChanged', handleIconStyleChange as EventListener);
+    return () => window.removeEventListener('iconStyleChanged', handleIconStyleChange as EventListener);
   }, []);
 
   // 处理右键菜单
@@ -77,10 +92,22 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                 avatarUrl={avatarUrl}
                 initialSidebarItems={sidebarItems}
               />
-              <div className="p-inset h-full w-full relative pl-16 flex flex-col items-center justify-center gap-8">
-                <SimpleTimeDisplay />
-                <SearchEngine openInNewTab={openInNewTab.search} />
-                <DraggableGrid openInNewTab={openInNewTab.icon} />
+              <div className="h-full w-full relative pl-16 flex flex-col">
+                {/* 顶部区域：时间和搜索框 */}
+                <div className="flex-shrink-0 flex flex-col items-center justify-center pt-12 pb-8 gap-6">
+                  <SimpleTimeDisplay />
+                  <SearchEngine openInNewTab={openInNewTab.search} />
+                </div>
+                
+                {/* 图标网格区域 */}
+                <div className="flex-1 overflow-y-auto flex justify-center px-8 pb-8">
+                  <div 
+                    className="w-full"
+                    style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
+                  >
+                    <DraggableGrid openInNewTab={openInNewTab.icon} iconStyle={currentIconStyle} />
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -124,6 +151,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             hasSecretKey={hasSecretKey}
             initialOpenInNewTab={openInNewTab}
             initialLayoutMode={layoutMode}
+            initialIconStyle={iconStyle}
           />
         </div>
       </main>
@@ -142,6 +170,7 @@ export async function getServerSideProps() {
   let sidebarItems: SidebarItem[] | null = null;
   let openInNewTab = { search: true, icon: true }; // 默认都在新标签页打开
   let layoutMode: 'component' | 'minimal' = 'component'; // 默认组件模式
+  let iconStyle: IconStyleSettings = { size: 80, borderRadius: 12, opacity: 100, spacing: 16, showName: true, nameSize: 12, nameColor: '#ffffff', maxWidth: 1500 }; // 默认图标样式
   const hasSecretKey = !!SECRET_KEY;
 
   try {
@@ -168,6 +197,22 @@ export async function getServerSideProps() {
       if (layoutModeStr && (layoutModeStr === 'component' || layoutModeStr === 'minimal')) {
         layoutMode = layoutModeStr;
       }
+
+      // 读取图标样式
+      const iconStyleStr = await NEWTAB_KV.get('icon_style');
+      if (iconStyleStr) {
+        const style = JSON.parse(iconStyleStr);
+        iconStyle = {
+          size: style.size ?? 80,
+          borderRadius: style.borderRadius ?? 12,
+          opacity: style.opacity ?? 100,
+          spacing: style.spacing ?? 16,
+          showName: style.showName ?? true,
+          nameSize: style.nameSize ?? 12,
+          nameColor: style.nameColor ?? '#ffffff',
+          maxWidth: style.maxWidth ?? 1500,
+        };
+      }
     }
   } catch (error) {
     console.error('Failed to load settings from KV:', error);
@@ -180,6 +225,7 @@ export async function getServerSideProps() {
       sidebarItems,
       openInNewTab,
       layoutMode,
+      iconStyle,
     },
   };
 }
