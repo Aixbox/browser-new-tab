@@ -19,6 +19,8 @@ import { AccountSettings } from "./account-settings";
 import { OpenMethodSettings } from "./open-method-settings";
 import { LayoutSettings } from "./layout-settings";
 import { IconSettings, type IconStyleSettings } from "./icon-settings";
+import { ThemeSettings } from "./theme-settings";
+import { SidebarSettingsComponent, type SidebarSettings } from "./sidebar-settings";
 
 interface SettingsDialogProps {
   isOpen?: boolean;
@@ -28,6 +30,8 @@ interface SettingsDialogProps {
   initialOpenInNewTab?: { search?: boolean; icon?: boolean };
   initialLayoutMode?: 'component' | 'minimal';
   initialIconStyle?: IconStyleSettings;
+  initialBackgroundUrl?: string | null;
+  initialSidebarSettings?: SidebarSettings;
 }
 
 // 导航项配置
@@ -43,7 +47,7 @@ const navigationItems = [
   { id: 'about', label: '关于', icon: InfoCircledIcon },
 ];
 
-export const SettingsDialog = ({ isOpen, onOpenChange, initialAvatarUrl, hasSecretKey, initialOpenInNewTab, initialLayoutMode, initialIconStyle }: SettingsDialogProps) => {
+export const SettingsDialog = ({ isOpen, onOpenChange, initialAvatarUrl, hasSecretKey, initialOpenInNewTab, initialLayoutMode, initialIconStyle, initialBackgroundUrl, initialSidebarSettings }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState('account');
   const isDialogOpen = isOpen ?? false;
   const setIsDialogOpen = onOpenChange ?? (() => {});
@@ -149,6 +153,16 @@ export const SettingsDialog = ({ isOpen, onOpenChange, initialAvatarUrl, hasSecr
                   <LayoutSettings 
                     hasSecretKey={hasSecretKey}
                     initialLayoutMode={initialLayoutMode}
+                  />
+                ) : activeTab === 'theme' ? (
+                  <ThemeSettings 
+                    hasSecretKey={hasSecretKey}
+                    initialBackgroundUrl={initialBackgroundUrl}
+                  />
+                ) : activeTab === 'sidebar' ? (
+                  <SidebarSettingsComponent 
+                    hasSecretKey={hasSecretKey}
+                    initialSidebarSettings={initialSidebarSettings}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center">

@@ -49,6 +49,8 @@ interface CustomSidebarProps {
   onAvatarClick?: () => void;
   avatarUrl?: string | null;
   className?: string;
+  wheelScroll?: boolean;
+  width?: number;
 }
 
 const defaultItems: SidebarItem[] = [
@@ -62,7 +64,9 @@ export const CustomSidebar = ({
   onItemsChange,
   onAvatarClick,
   avatarUrl,
-  className 
+  className,
+  wheelScroll = false,
+  width = 64
 }: CustomSidebarProps) => {
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>(items);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -73,12 +77,41 @@ export const CustomSidebar = ({
   const [newItemIcon, setNewItemIcon] = useState<keyof typeof availableIcons>("home");
   const [avatarError, setAvatarError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   // 当 avatarUrl 改变时重置错误状态
   useEffect(() => {
     setAvatarError(false);
     setUseProxy(false);
   }, [avatarUrl]);
+
+  // 滚轮切换分组
+  useEffect(() => {
+    if (!wheelScroll) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const delta = e.deltaY;
+      
+      if (delta > 0) {
+        // 向下滚动，切换到下一个
+        setCurrentIndex(prev => Math.min(prev + 1, sidebarItems.length - 1));
+      } else {
+        // 向上滚动，切换到上一个
+        setCurrentIndex(prev => Math.max(prev - 1, 0));
+      }
+    };
+
+    // 监听整个页面的滚轮事件
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [wheelScroll, sidebarItems.length]);
+
+  // 当滚轮切换时，自动选中当前项
+  useEffect(() => {
+    if (wheelScroll && sidebarItems[currentIndex]) {
+      setSelectedItemId(sidebarItems[currentIndex].id);
+    }
+  }, [currentIndex, wheelScroll, sidebarItems]);
 
   const handleAddItem = () => {
     if (!newItemTitle.trim()) return;
@@ -158,14 +191,16 @@ export const CustomSidebar = ({
 
   return (
     <motion.div
+      id="custom-sidebar"
       initial={{ x: -100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
       className={cn(
-        "fixed left-0 top-0 h-full w-14 bg-primary/20 backdrop-blur-xs border-r border-white/20 z-50",
+        "fixed left-0 top-0 h-full bg-primary/20 backdrop-blur-xs border-r border-white/20 z-50",
         "flex flex-col items-center",
         className
       )}
+      style={{ width: `${width}px` }}
     >
       {/* 头像图标 - 固定在顶部 */}
       <div className="w-full flex items-center justify-center py-4 border-b border-white/20">

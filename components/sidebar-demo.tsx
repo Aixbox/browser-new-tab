@@ -9,6 +9,8 @@ interface SidebarDemoProps {
   onAvatarClick?: () => void;
   avatarUrl?: string | null;
   initialSidebarItems?: SidebarItem[] | null;
+  wheelScroll?: boolean;
+  width?: number;
 }
 
 const defaultItems: SidebarItem[] = [
@@ -29,7 +31,7 @@ const defaultItems: SidebarItem[] = [
   },
 ];
 
-export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems }: SidebarDemoProps) => {
+export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems, wheelScroll = false, width = 64 }: SidebarDemoProps) => {
   const [items, setItems] = useState<SidebarItem[]>(initialSidebarItems || defaultItems);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -74,6 +76,8 @@ export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems }: S
       onItemsChange={handleItemsChange}
       onAvatarClick={onAvatarClick}
       avatarUrl={avatarUrl}
+      wheelScroll={wheelScroll}
+      width={width}
     />
   );
 };

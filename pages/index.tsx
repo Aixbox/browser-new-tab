@@ -10,6 +10,7 @@ import { SettingsDialog } from "@/components/settings-drawer";
 import { SidebarItem } from "@/components/custom-sidebar";
 import { GearIcon } from "@radix-ui/react-icons";
 import type { IconStyleSettings } from "@/components/icon-settings";
+import type { SidebarSettings } from "@/components/sidebar-settings";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
 export const config = {
@@ -23,13 +24,18 @@ interface HomeProps {
   openInNewTab: { search: boolean; icon: boolean };
   layoutMode: 'component' | 'minimal';
   iconStyle: IconStyleSettings;
+  backgroundUrl: string | null;
+  sidebarSettings: SidebarSettings;
 }
 
-export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle }: HomeProps) {
+export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentLayoutMode, setCurrentLayoutMode] = useState<'component' | 'minimal'>(layoutMode);
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [currentIconStyle, setCurrentIconStyle] = useState<IconStyleSettings>(iconStyle);
+  const [currentBackgroundUrl, setCurrentBackgroundUrl] = useState<string | null>(backgroundUrl);
+  const [currentSidebarSettings, setCurrentSidebarSettings] = useState<SidebarSettings>(sidebarSettings);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   // 监听布局模式变化
   useEffect(() => {
@@ -54,6 +60,51 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     window.addEventListener('iconStyleChanged', handleIconStyleChange as EventListener);
     return () => window.removeEventListener('iconStyleChanged', handleIconStyleChange as EventListener);
   }, []);
+
+  // 监听背景变化
+  useEffect(() => {
+    const handleBackgroundChange = (e: CustomEvent) => {
+      if (e.detail?.url !== undefined) {
+        setCurrentBackgroundUrl(e.detail.url);
+      }
+    };
+    
+    window.addEventListener('backgroundChanged', handleBackgroundChange as EventListener);
+    return () => window.removeEventListener('backgroundChanged', handleBackgroundChange as EventListener);
+  }, []);
+
+  // 监听侧边栏设置变化
+  useEffect(() => {
+    const handleSidebarSettingsChange = (e: CustomEvent) => {
+      if (e.detail) {
+        setCurrentSidebarSettings(e.detail);
+      }
+    };
+    
+    window.addEventListener('sidebarSettingsChanged', handleSidebarSettingsChange as EventListener);
+    return () => window.removeEventListener('sidebarSettingsChanged', handleSidebarSettingsChange as EventListener);
+  }, []);
+
+  // 自动隐藏侧边栏逻辑
+  useEffect(() => {
+    if (!currentSidebarSettings.autoHide) {
+      setIsSidebarVisible(true);
+      return;
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const threshold = 50; // 触发区域宽度
+      const isLeft = currentSidebarSettings.position === 'left';
+      const isNearEdge = isLeft 
+        ? e.clientX < threshold 
+        : e.clientX > window.innerWidth - threshold;
+      
+      setIsSidebarVisible(isNearEdge);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [currentSidebarSettings.autoHide, currentSidebarSettings.position]);
 
   // 处理右键菜单
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -80,19 +131,34 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       <main className="h-dvh w-full" onContextMenu={handleContextMenu}>
         <div className="relative h-full w-full">
           <Background 
-            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/alt-g7Cv2QzqL3k6ey3igjNYkM32d8Fld7.mp4" 
+            src={currentBackgroundUrl || "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/alt-g7Cv2QzqL3k6ey3igjNYkM32d8Fld7.mp4"}
             placeholder="/alt-placeholder.png" 
           />
           
           {/* 组件模式 */}
           {currentLayoutMode === 'component' && (
             <>
-              <SidebarDemo 
-                onAvatarClick={() => setIsSettingsOpen(true)}
-                avatarUrl={avatarUrl}
-                initialSidebarItems={sidebarItems}
-              />
-              <div className="h-full w-full relative pl-16 flex flex-col">
+              <div 
+                className={`absolute top-0 ${currentSidebarSettings.position === 'left' ? 'left-0' : 'right-0'} h-full transition-transform duration-300 z-20`}
+                style={{
+                  transform: isSidebarVisible ? 'translateX(0)' : currentSidebarSettings.position === 'left' ? 'translateX(-100%)' : 'translateX(100%)',
+                  width: `${currentSidebarSettings.width}px`
+                }}
+              >
+                <SidebarDemo 
+                  onAvatarClick={() => setIsSettingsOpen(true)}
+                  avatarUrl={avatarUrl}
+                  initialSidebarItems={sidebarItems}
+                  wheelScroll={currentSidebarSettings.wheelScroll}
+                  width={currentSidebarSettings.width}
+                />
+              </div>
+              <div 
+                className="h-full w-full relative flex flex-col"
+                style={{
+                  [currentSidebarSettings.position === 'left' ? 'paddingLeft' : 'paddingRight']: `${currentSidebarSettings.width}px`
+                }}
+              >
                 {/* 顶部区域：时间和搜索框 */}
                 <div className="flex-shrink-0 flex flex-col items-center justify-center pt-12 pb-8 gap-6">
                   <SimpleTimeDisplay />
@@ -152,6 +218,8 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             initialOpenInNewTab={openInNewTab}
             initialLayoutMode={layoutMode}
             initialIconStyle={iconStyle}
+            initialBackgroundUrl={backgroundUrl}
+            initialSidebarSettings={sidebarSettings}
           />
         </div>
       </main>
@@ -171,6 +239,8 @@ export async function getServerSideProps() {
   let openInNewTab = { search: true, icon: true }; // 默认都在新标签页打开
   let layoutMode: 'component' | 'minimal' = 'component'; // 默认组件模式
   let iconStyle: IconStyleSettings = { size: 80, borderRadius: 12, opacity: 100, spacing: 16, showName: true, nameSize: 12, nameColor: '#ffffff', maxWidth: 1500 }; // 默认图标样式
+  let backgroundUrl: string | null = null; // 默认背景
+  let sidebarSettings: SidebarSettings = { position: 'left', autoHide: false, wheelScroll: false, width: 64 }; // 默认侧边栏设置
   const hasSecretKey = !!SECRET_KEY;
 
   try {
@@ -213,6 +283,21 @@ export async function getServerSideProps() {
           maxWidth: style.maxWidth ?? 1500,
         };
       }
+
+      // 读取背景链接
+      backgroundUrl = await NEWTAB_KV.get('background_url');
+
+      // 读取侧边栏设置
+      const sidebarSettingsStr = await NEWTAB_KV.get('sidebar_settings');
+      if (sidebarSettingsStr) {
+        const settings = JSON.parse(sidebarSettingsStr);
+        sidebarSettings = {
+          position: settings.position ?? 'left',
+          autoHide: settings.autoHide ?? false,
+          wheelScroll: settings.wheelScroll ?? false,
+          width: settings.width ?? 64,
+        };
+      }
     }
   } catch (error) {
     console.error('Failed to load settings from KV:', error);
@@ -226,6 +311,8 @@ export async function getServerSideProps() {
       openInNewTab,
       layoutMode,
       iconStyle,
+      backgroundUrl,
+      sidebarSettings,
     },
   };
 }
