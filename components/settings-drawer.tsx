@@ -58,15 +58,15 @@ export const SettingsDialog = ({ isOpen, onOpenChange, initialAvatarUrl, hasSecr
 
   return (
     <>
-      {/* 对话框遮罩 - 图标设置时不显示 */}
+      {/* 对话框遮罩 - 透明但保留点击关闭功能 */}
       <AnimatePresence>
-        {isDialogOpen && !isIconSettings && (
+        {isDialogOpen && (
           <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+            className="fixed inset-0 z-40"
             onClick={() => setIsDialogOpen?.(false)}
           />
         )}
