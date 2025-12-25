@@ -16,6 +16,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AccountSettings } from "./account-settings";
+import { OpenMethodSettings } from "./open-method-settings";
 
 interface SettingsDialogProps {
   children?: React.ReactNode;
@@ -23,6 +24,7 @@ interface SettingsDialogProps {
   onOpenChange?: (open: boolean) => void;
   initialAvatarUrl?: string | null;
   hasSecretKey?: boolean;
+  initialOpenInNewTab?: { search?: boolean; icon?: boolean };
 }
 
 // 导航项配置
@@ -38,7 +40,7 @@ const navigationItems = [
   { id: 'about', label: '关于', icon: InfoCircledIcon },
 ];
 
-export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUrl, hasSecretKey }: SettingsDialogProps) => {
+export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUrl, hasSecretKey, initialOpenInNewTab }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState('account');
   const isDialogOpen = isOpen ?? false;
   const setIsDialogOpen = onOpenChange ?? (() => {});
@@ -118,6 +120,11 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUr
                   <AccountSettings 
                     initialAvatarUrl={initialAvatarUrl}
                     hasSecretKey={hasSecretKey}
+                  />
+                ) : activeTab === 'openMethod' ? (
+                  <OpenMethodSettings 
+                    hasSecretKey={hasSecretKey}
+                    initialOpenInNewTab={initialOpenInNewTab}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center">

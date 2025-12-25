@@ -18,9 +18,10 @@ interface HomeProps {
   avatarUrl: string | null;
   hasSecretKey: boolean;
   sidebarItems: SidebarItem[] | null;
+  openInNewTab: { search: boolean; icon: boolean };
 }
 
-export default function Home({ avatarUrl, hasSecretKey, sidebarItems }: HomeProps) {
+export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   return (
@@ -43,8 +44,8 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems }: HomeProp
           />
           <div className="p-inset h-full w-full relative pl-16 flex flex-col items-center justify-center gap-8">
             <SimpleTimeDisplay />
-            <SearchEngine />
-            <DraggableGrid />
+            <SearchEngine openInNewTab={openInNewTab.search} />
+            <DraggableGrid openInNewTab={openInNewTab.icon} />
           </div>
           
           {/* 设置对话框 */}
@@ -53,6 +54,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems }: HomeProp
             onOpenChange={setIsSettingsOpen}
             initialAvatarUrl={avatarUrl}
             hasSecretKey={hasSecretKey}
+            initialOpenInNewTab={openInNewTab}
           />
         </div>
       </main>
@@ -69,6 +71,7 @@ export async function getServerSideProps() {
 
   let avatarUrl: string | null = null;
   let sidebarItems: SidebarItem[] | null = null;
+  let openInNewTab = { search: true, icon: true }; // 默认都在新标签页打开
   const hasSecretKey = !!SECRET_KEY;
 
   try {
@@ -78,6 +81,16 @@ export async function getServerSideProps() {
       const sidebarItemsStr = await NEWTAB_KV.get('sidebar_items');
       if (sidebarItemsStr) {
         sidebarItems = JSON.parse(sidebarItemsStr);
+      }
+      
+      // 读取打开方式设置
+      const openInNewTabStr = await NEWTAB_KV.get('open_in_new_tab');
+      if (openInNewTabStr) {
+        const settings = JSON.parse(openInNewTabStr);
+        openInNewTab = {
+          search: settings.search ?? true,
+          icon: settings.icon ?? true,
+        };
       }
     }
   } catch (error) {
@@ -89,6 +102,7 @@ export async function getServerSideProps() {
       avatarUrl,
       hasSecretKey,
       sidebarItems,
+      openInNewTab,
     },
   };
 }

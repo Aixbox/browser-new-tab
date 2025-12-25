@@ -108,7 +108,7 @@ const defaultSearchEngines: SearchEngine[] = [
   },
 ];
 
-export const SearchEngine = () => {
+export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { openInNewTab?: boolean }) => {
   const [query, setQuery] = useState("");
   const [selectedEngine, setSelectedEngine] = useState("google");
   const [searchEngines, setSearchEngines] = useState<SearchEngine[]>(defaultSearchEngines);
@@ -120,8 +120,21 @@ export const SearchEngine = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [openInNewTab, setOpenInNewTab] = useState(initialOpenInNewTab);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 监听设置变化
+  useEffect(() => {
+    const handleSettingsChange = (e: CustomEvent) => {
+      if (e.detail?.search !== undefined) {
+        setOpenInNewTab(e.detail.search);
+      }
+    };
+    
+    window.addEventListener('openInNewTabChanged', handleSettingsChange as EventListener);
+    return () => window.removeEventListener('openInNewTabChanged', handleSettingsChange as EventListener);
+  }, []);
 
   // 获取搜索建议
   const fetchSuggestions = async (searchQuery: string) => {
@@ -183,7 +196,8 @@ export const SearchEngine = () => {
     
     const engine = searchEngines.find(e => e.id === selectedEngine);
     if (engine) {
-      window.open(engine.url + encodeURIComponent(searchQuery.trim()), '_blank');
+      const target = openInNewTab ? '_blank' : '_self';
+      window.open(engine.url + encodeURIComponent(searchQuery.trim()), target);
       setShowSuggestions(false);
       setSelectedSuggestionIndex(-1);
     }

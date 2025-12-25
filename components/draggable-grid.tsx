@@ -113,8 +113,9 @@ interface IconItem {
 }
 
 // 可拖拽的图标项
-const DraggableItem = ({ item }: { 
+const DraggableItem = ({ item, openInNewTab }: { 
   item: IconItem;
+  openInNewTab: boolean;
 }) => {
   const {
     attributes,
@@ -163,6 +164,11 @@ const DraggableItem = ({ item }: {
     );
   };
 
+  const handleClick = () => {
+    const target = openInNewTab ? '_blank' : '_self';
+    window.open(item.url, target);
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -170,7 +176,7 @@ const DraggableItem = ({ item }: {
       {...attributes}
       {...listeners}
       className="flex flex-col items-center gap-2 p-2 rounded-xl cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors group"
-      onClick={() => window.open(item.url, '_blank')}
+      onClick={handleClick}
     >
       {renderIcon()}
       <span className="text-xs text-white/90 text-center font-medium leading-tight max-w-full truncate">
@@ -197,7 +203,7 @@ const AddIconItem = ({ onClick }: { onClick: () => void }) => {
   );
 };
 
-export const DraggableGrid = () => {
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true }: { openInNewTab?: boolean }) => {
   const [items, setItems] = useState<IconItem[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -212,9 +218,22 @@ export const DraggableGrid = () => {
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [tempColor, setTempColor] = useState('#3b82f6');
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [openInNewTab, setOpenInNewTab] = useState(initialOpenInNewTab);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const colorButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
+
+  // 监听设置变化
+  useEffect(() => {
+    const handleSettingsChange = (e: CustomEvent) => {
+      if (e.detail?.icon !== undefined) {
+        setOpenInNewTab(e.detail.icon);
+      }
+    };
+    
+    window.addEventListener('openInNewTabChanged', handleSettingsChange as EventListener);
+    return () => window.removeEventListener('openInNewTabChanged', handleSettingsChange as EventListener);
+  }, []);
 
   // 预设颜色
   const presetColors = [
@@ -435,6 +454,7 @@ export const DraggableGrid = () => {
                 <DraggableItem
                   key={item.id}
                   item={item}
+                  openInNewTab={openInNewTab}
                 />
               ))}
               <AddIconItem onClick={() => setIsDialogOpen(true)} />

@@ -129,7 +129,7 @@ export const AccountSettings = ({ initialAvatarUrl, hasSecretKey }: {
     setIsLoading(true);
     setMessage('');
     try {
-      const result = await setSetting('avatar_url', tempAvatarUrl);
+      const result = await setSetting('avatar_url', tempAvatarUrl) as { success?: boolean };
 
       if (result.success) {
         setAvatarUrl(tempAvatarUrl);
