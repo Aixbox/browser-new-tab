@@ -119,10 +119,11 @@ interface IconItem {
 }
 
 // 可拖拽的图标项
-const DraggableItem = ({ item, openInNewTab, iconStyle }: { 
+const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth }: { 
   item: IconItem;
   openInNewTab: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number };
+  nameMaxWidth: number;
 }) => {
   const {
     attributes,
@@ -151,12 +152,16 @@ const DraggableItem = ({ item, openInNewTab, iconStyle }: {
       opacity: opacity,
     };
 
+    const hoverClass = "hover:opacity-80 transition-opacity relative";
+    const zIndexStyle = { zIndex: 10 };
+
     if (item.iconType === 'text' && item.iconText && item.iconColor) {
       return (
         <div 
-          className="flex items-center justify-center text-white font-semibold overflow-hidden transition-all duration-200"
+          className={cn("flex items-center justify-center text-white font-semibold overflow-hidden transition-all duration-200", hoverClass)}
           style={{
             ...iconStyle_css,
+            ...zIndexStyle,
             backgroundColor: item.iconColor,
             fontSize: `${iconSize / 4}px`,
           }}
@@ -171,8 +176,8 @@ const DraggableItem = ({ item, openInNewTab, iconStyle }: {
         <IconImage 
           src={item.iconImage}
           alt={item.name}
-          className="object-cover transition-all duration-200"
-          style={iconStyle_css}
+          className={cn("object-cover transition-all duration-200", hoverClass)}
+          style={{...iconStyle_css, ...zIndexStyle}}
         />
       );
     }
@@ -182,16 +187,16 @@ const DraggableItem = ({ item, openInNewTab, iconStyle }: {
         <IconImage 
           src={item.iconLogo}
           alt={item.name}
-          className="object-contain transition-all duration-200"
-          style={iconStyle_css}
+          className={cn("object-contain transition-all duration-200", hoverClass)}
+          style={{...iconStyle_css, ...zIndexStyle}}
         />
       );
     }
 
     return (
       <div 
-        className="flex items-center justify-center bg-white/5 transition-all duration-200"
-        style={iconStyle_css}
+        className={cn("flex items-center justify-center bg-white/5 transition-all duration-200", hoverClass)}
+        style={{...iconStyle_css, ...zIndexStyle}}
       >
         <GlobeIcon className="w-6 h-6 text-white" />
       </div>
@@ -206,6 +211,7 @@ const DraggableItem = ({ item, openInNewTab, iconStyle }: {
   const showName = iconStyle?.showName ?? true;
   const nameSize = iconStyle?.nameSize ?? 12;
   const nameColor = iconStyle?.nameColor ?? '#ffffff';
+  const iconSize = iconStyle?.size || 80;
 
   return (
     <div
@@ -213,44 +219,69 @@ const DraggableItem = ({ item, openInNewTab, iconStyle }: {
       style={style}
       {...attributes}
       {...listeners}
-      className="flex flex-col items-center gap-2 p-2 rounded-xl cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors group"
+      className="relative cursor-grab active:cursor-grabbing"
       onClick={handleClick}
     >
-      {renderIcon()}
+      <div style={{ width: `${iconSize}px`, height: `${iconSize}px` }}>
+        {renderIcon()}
+      </div>
       {showName && (
-        <span 
-          className="text-center font-medium leading-tight max-w-full truncate"
+        <div 
+          className="absolute font-medium leading-tight"
           style={{
             fontSize: `${nameSize}px`,
             color: nameColor,
+            top: `${iconSize + 8}px`,
+            left: `${-(nameMaxWidth - iconSize) / 2}px`,
+            width: `${nameMaxWidth}px`,
+            textAlign: 'center',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            zIndex: 0,
           }}
         >
           {item.name}
-        </span>
+        </div>
       )}
     </div>
   );
 };
 
 // 添加新图标的占位符
-const AddIconItem = ({ onClick, iconSize = 80 }: { onClick: () => void; iconSize?: number }) => {
+const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => void; iconSize?: number; nameMaxWidth: number }) => {
   return (
     <div
-      className="flex flex-col items-center gap-2 p-2 rounded-xl cursor-pointer hover:bg-white/10 transition-colors border-2 border-dashed border-white/30 hover:border-white/50"
+      className="relative cursor-pointer group"
       onClick={onClick}
     >
       <div 
-        className="flex items-center justify-center rounded-lg"
+        className="flex items-center justify-center rounded-lg border-2 border-dashed border-white/30 hover:border-white/50 transition-colors relative"
         style={{
           width: `${iconSize}px`,
           height: `${iconSize}px`,
+          zIndex: 10,
         }}
       >
-        <PlusIcon className="w-6 h-6 text-white/60" />
+        <PlusIcon className="w-6 h-6 text-white/60 group-hover:text-white/80 transition-colors" />
       </div>
-      <span className="text-xs text-white/60 text-center font-medium">
+      <div 
+        className="absolute font-medium group-hover:text-white/80 transition-colors"
+        style={{ 
+          fontSize: '12px',
+          color: 'rgba(255, 255, 255, 0.6)',
+          top: `${iconSize + 8}px`,
+          left: `${-(nameMaxWidth - iconSize) / 2}px`,
+          width: `${nameMaxWidth}px`,
+          textAlign: 'center',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          zIndex: 0,
+        }}
+      >
         添加
-      </span>
+      </div>
     </div>
   );
 };
@@ -497,7 +528,12 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
 
   const iconSize = iconStyle?.size || 80;
   const iconSpacing = iconStyle?.spacing ?? 16;
-  const gridMinSize = iconSize + 40; // 图标大小 + 额外空间（padding + 文字）
+  const showName = iconStyle?.showName ?? true;
+  const nameSize = iconStyle?.nameSize ?? 12;
+  // Grid 列宽度只基于图标大小，不包含名称
+  const gridMinSize = iconSize;
+  // 名称最大宽度 = 图标宽度 + 间距 - 5px（左右各留 2.5px 间距）
+  const nameMaxWidth = iconSize + iconSpacing - 6;
 
   return (
     <>
@@ -511,7 +547,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
             <div 
               className="grid w-full"
               style={{
-                gridTemplateColumns: `repeat(auto-fill, minmax(${gridMinSize}px, 1fr))`,
+                gridTemplateColumns: `repeat(auto-fill, ${gridMinSize}px)`,
                 gap: `${iconSpacing}px`
               }}
             >
@@ -521,9 +557,10 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
                   item={item}
                   openInNewTab={openInNewTab}
                   iconStyle={iconStyle}
+                  nameMaxWidth={nameMaxWidth}
                 />
               ))}
-              <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} />
+              <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} nameMaxWidth={nameMaxWidth} />
             </div>
           </SortableContext>
         </DndContext>
