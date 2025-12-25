@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Head from "next/head";
 import { KVNamespace } from '@cloudflare/workers-types';
 import { Background } from "@/components/background";
@@ -8,6 +8,7 @@ import { SimpleTimeDisplay } from "@/components/simple-time-display";
 import { DraggableGrid } from "@/components/draggable-grid";
 import { SettingsDialog } from "@/components/settings-drawer";
 import { SidebarItem } from "@/components/custom-sidebar";
+import { GearIcon } from "@radix-ui/react-icons";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
 export const config = {
@@ -19,10 +20,40 @@ interface HomeProps {
   hasSecretKey: boolean;
   sidebarItems: SidebarItem[] | null;
   openInNewTab: { search: boolean; icon: boolean };
+  layoutMode: 'component' | 'minimal';
 }
 
-export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab }: HomeProps) {
+export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [currentLayoutMode, setCurrentLayoutMode] = useState<'component' | 'minimal'>(layoutMode);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // 监听布局模式变化
+  useEffect(() => {
+    const handleLayoutModeChange = (e: CustomEvent) => {
+      if (e.detail?.mode) {
+        setCurrentLayoutMode(e.detail.mode);
+      }
+    };
+    
+    window.addEventListener('layoutModeChanged', handleLayoutModeChange as EventListener);
+    return () => window.removeEventListener('layoutModeChanged', handleLayoutModeChange as EventListener);
+  }, []);
+
+  // 处理右键菜单
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+  };
+
+  // 点击其他地方关闭菜单
+  useEffect(() => {
+    const handleClick = () => setContextMenuPosition(null);
+    if (contextMenuPosition) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [contextMenuPosition]);
 
   return (
     <>
@@ -31,22 +62,59 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="h-dvh w-full">
+      <main className="h-dvh w-full" onContextMenu={handleContextMenu}>
         <div className="relative h-full w-full">
           <Background 
             src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/alt-g7Cv2QzqL3k6ey3igjNYkM32d8Fld7.mp4" 
             placeholder="/alt-placeholder.png" 
           />
-          <SidebarDemo 
-            onAvatarClick={() => setIsSettingsOpen(true)}
-            avatarUrl={avatarUrl}
-            initialSidebarItems={sidebarItems}
-          />
-          <div className="p-inset h-full w-full relative pl-16 flex flex-col items-center justify-center gap-8">
-            <SimpleTimeDisplay />
-            <SearchEngine openInNewTab={openInNewTab.search} />
-            <DraggableGrid openInNewTab={openInNewTab.icon} />
-          </div>
+          
+          {/* 组件模式 */}
+          {currentLayoutMode === 'component' && (
+            <>
+              <SidebarDemo 
+                onAvatarClick={() => setIsSettingsOpen(true)}
+                avatarUrl={avatarUrl}
+                initialSidebarItems={sidebarItems}
+              />
+              <div className="p-inset h-full w-full relative pl-16 flex flex-col items-center justify-center gap-8">
+                <SimpleTimeDisplay />
+                <SearchEngine openInNewTab={openInNewTab.search} />
+                <DraggableGrid openInNewTab={openInNewTab.icon} />
+              </div>
+            </>
+          )}
+
+          {/* 极简模式 */}
+          {currentLayoutMode === 'minimal' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 p-8 z-10">
+              <SimpleTimeDisplay />
+              <SearchEngine openInNewTab={openInNewTab.search} />
+            </div>
+          )}
+
+          {/* 右键菜单 */}
+          {contextMenuPosition && (
+            <div
+              className="fixed bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-lg shadow-xl z-[100] py-1 min-w-[160px]"
+              style={{
+                left: `${contextMenuPosition.x}px`,
+                top: `${contextMenuPosition.y}px`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => {
+                  setIsSettingsOpen(true);
+                  setContextMenuPosition(null);
+                }}
+                className="w-full px-4 py-2 text-left text-white hover:bg-white/10 transition-colors flex items-center gap-3"
+              >
+                <GearIcon className="w-4 h-4" />
+                <span>设置</span>
+              </button>
+            </div>
+          )}
           
           {/* 设置对话框 */}
           <SettingsDialog 
@@ -55,6 +123,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             initialAvatarUrl={avatarUrl}
             hasSecretKey={hasSecretKey}
             initialOpenInNewTab={openInNewTab}
+            initialLayoutMode={layoutMode}
           />
         </div>
       </main>
@@ -72,6 +141,7 @@ export async function getServerSideProps() {
   let avatarUrl: string | null = null;
   let sidebarItems: SidebarItem[] | null = null;
   let openInNewTab = { search: true, icon: true }; // 默认都在新标签页打开
+  let layoutMode: 'component' | 'minimal' = 'component'; // 默认组件模式
   const hasSecretKey = !!SECRET_KEY;
 
   try {
@@ -92,6 +162,12 @@ export async function getServerSideProps() {
           icon: settings.icon ?? true,
         };
       }
+
+      // 读取布局模式
+      const layoutModeStr = await NEWTAB_KV.get('layout_mode');
+      if (layoutModeStr && (layoutModeStr === 'component' || layoutModeStr === 'minimal')) {
+        layoutMode = layoutModeStr;
+      }
     }
   } catch (error) {
     console.error('Failed to load settings from KV:', error);
@@ -103,6 +179,7 @@ export async function getServerSideProps() {
       hasSecretKey,
       sidebarItems,
       openInNewTab,
+      layoutMode,
     },
   };
 }

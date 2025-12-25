@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { AccountSettings } from "./account-settings";
 import { OpenMethodSettings } from "./open-method-settings";
+import { LayoutSettings } from "./layout-settings";
 
 interface SettingsDialogProps {
   children?: React.ReactNode;
@@ -25,6 +26,7 @@ interface SettingsDialogProps {
   initialAvatarUrl?: string | null;
   hasSecretKey?: boolean;
   initialOpenInNewTab?: { search?: boolean; icon?: boolean };
+  initialLayoutMode?: 'component' | 'minimal';
 }
 
 // 导航项配置
@@ -40,7 +42,7 @@ const navigationItems = [
   { id: 'about', label: '关于', icon: InfoCircledIcon },
 ];
 
-export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUrl, hasSecretKey, initialOpenInNewTab }: SettingsDialogProps) => {
+export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUrl, hasSecretKey, initialOpenInNewTab, initialLayoutMode }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState('account');
   const isDialogOpen = isOpen ?? false;
   const setIsDialogOpen = onOpenChange ?? (() => {});
@@ -125,6 +127,11 @@ export const SettingsDialog = ({ children, isOpen, onOpenChange, initialAvatarUr
                   <OpenMethodSettings 
                     hasSecretKey={hasSecretKey}
                     initialOpenInNewTab={initialOpenInNewTab}
+                  />
+                ) : activeTab === 'layout' ? (
+                  <LayoutSettings 
+                    hasSecretKey={hasSecretKey}
+                    initialLayoutMode={initialLayoutMode}
                   />
                 ) : (
                   <div className="h-full flex items-center justify-center">
