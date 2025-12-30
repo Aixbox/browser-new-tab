@@ -26,9 +26,10 @@ interface HomeProps {
   iconStyle: IconStyleSettings;
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
+  iconItems: any[] | null;
 }
 
-export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings }: HomeProps) {
+export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings, iconItems }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentLayoutMode, setCurrentLayoutMode] = useState<'component' | 'minimal'>(layoutMode);
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -171,7 +172,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                     className="w-full"
                     style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
                   >
-                    <DraggableGrid openInNewTab={openInNewTab.icon} iconStyle={currentIconStyle} />
+                    <DraggableGrid openInNewTab={openInNewTab.icon} iconStyle={currentIconStyle} initialItems={iconItems || []} />
                   </div>
                 </div>
               </div>
@@ -241,6 +242,7 @@ export async function getServerSideProps() {
   let iconStyle: IconStyleSettings = { size: 80, borderRadius: 12, opacity: 100, spacing: 16, showName: true, nameSize: 12, nameColor: '#ffffff', maxWidth: 1500 }; // 默认图标样式
   let backgroundUrl: string | null = null; // 默认背景
   let sidebarSettings: SidebarSettings = { position: 'left', autoHide: false, wheelScroll: false, width: 64 }; // 默认侧边栏设置
+  let iconItems: any[] | null = null; // 图标数据
   const hasSecretKey = !!SECRET_KEY;
 
   try {
@@ -298,6 +300,12 @@ export async function getServerSideProps() {
           width: settings.width ?? 64,
         };
       }
+
+      // 读取图标数据
+      const iconItemsStr = await NEWTAB_KV.get('icon_items');
+      if (iconItemsStr) {
+        iconItems = JSON.parse(iconItemsStr);
+      }
     }
   } catch (error) {
     console.error('Failed to load settings from KV:', error);
@@ -313,6 +321,7 @@ export async function getServerSideProps() {
       iconStyle,
       backgroundUrl,
       sidebarSettings,
+      iconItems,
     },
   };
 }

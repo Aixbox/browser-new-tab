@@ -119,11 +119,13 @@ interface IconItem {
 }
 
 // 可拖拽的图标项
-const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth }: { 
+const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, onEdit }: { 
   item: IconItem;
   openInNewTab: boolean;
-  iconStyle?: { size: number; borderRadius: number; opacity: number };
+  iconStyle?: { size: number; borderRadius: number; opacity: number; showName: boolean; nameSize: number; nameColor: string };
   nameMaxWidth: number;
+  onDelete: (id: string) => void;
+  onEdit: (item: IconItem) => void;
 }) => {
   const {
     attributes,
@@ -213,6 +215,49 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth }: {
   const nameColor = iconStyle?.nameColor ?? '#ffffff';
   const iconSize = iconStyle?.size || 80;
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const menu = document.createElement('div');
+    menu.className = 'fixed bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-lg shadow-xl z-[100] py-1 min-w-[120px]';
+    menu.style.left = `${e.clientX}px`;
+    menu.style.top = `${e.clientY}px`;
+    
+    const editBtn = document.createElement('button');
+    editBtn.className = 'w-full px-4 py-2 text-left text-white hover:bg-white/10 transition-colors';
+    editBtn.textContent = '编辑';
+    editBtn.onclick = () => {
+      onEdit(item);
+      document.body.removeChild(menu);
+    };
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'w-full px-4 py-2 text-left text-red-400 hover:bg-white/10 transition-colors';
+    deleteBtn.textContent = '删除';
+    deleteBtn.onclick = () => {
+      if (window.confirm(`确定要删除 "${item.name}" 吗？`)) {
+        onDelete(item.id);
+      }
+      document.body.removeChild(menu);
+    };
+    
+    menu.appendChild(editBtn);
+    menu.appendChild(deleteBtn);
+    document.body.appendChild(menu);
+    
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        document.body.removeChild(menu);
+        document.removeEventListener('click', closeMenu);
+      }
+    };
+    
+    setTimeout(() => {
+      document.addEventListener('click', closeMenu);
+    }, 0);
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -221,28 +266,24 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth }: {
       {...listeners}
       className="relative cursor-grab active:cursor-grabbing"
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
     >
       <div style={{ width: `${iconSize}px`, height: `${iconSize}px` }}>
         {renderIcon()}
       </div>
       {showName && (
-        <div 
-          className="absolute font-medium leading-tight"
+        <span 
+          className="font-medium leading-tight text-center block truncate"
           style={{
             fontSize: `${nameSize}px`,
             color: nameColor,
-            top: `${iconSize + 8}px`,
-            left: `${-(nameMaxWidth - iconSize) / 2}px`,
+            marginTop: '8px',
             width: `${nameMaxWidth}px`,
-            textAlign: 'center',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            zIndex: 0,
+            marginLeft: `${-(nameMaxWidth - iconSize) / 2}px`,
           }}
         >
           {item.name}
-        </div>
+        </span>
       )}
     </div>
   );
@@ -260,38 +301,33 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
         style={{
           width: `${iconSize}px`,
           height: `${iconSize}px`,
-          zIndex: 10,
         }}
       >
-        <PlusIcon className="w-6 h-6 text-white/60 group-hover:text-white/80 transition-colors" />
+        <PlusIcon className="w-6 h-6 text-white/60" />
       </div>
-      <div 
-        className="absolute font-medium group-hover:text-white/80 transition-colors"
+      <span 
+        className="text-xs text-white/60 text-center font-medium block truncate" 
         style={{ 
-          fontSize: '12px',
-          color: 'rgba(255, 255, 255, 0.6)',
-          top: `${iconSize + 8}px`,
-          left: `${-(nameMaxWidth - iconSize) / 2}px`,
+          marginTop: '8px', 
           width: `${nameMaxWidth}px`,
-          textAlign: 'center',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          zIndex: 0,
+          marginLeft: `${-(nameMaxWidth - iconSize) / 2}px`,
         }}
       >
         添加
-      </div>
+      </span>
     </div>
   );
 };
 
-export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle }: { 
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, initialItems }: { 
   openInNewTab?: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
+  initialItems?: IconItem[];
 }) => {
-  const [items, setItems] = useState<IconItem[]>([]);
+  const [items, setItems] = useState<IconItem[]>(initialItems || []);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingItem, setEditingItem] = useState<IconItem | null>(null);
   const [formData, setFormData] = useState({
     url: '',
     name: '',
@@ -344,17 +380,65 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     })
   );
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (active.id !== over?.id) {
-      setItems((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over?.id);
-
-        return arrayMove(items, oldIndex, newIndex);
-      });
+      const newItems = arrayMove(
+        items,
+        items.findIndex((item) => item.id === active.id),
+        items.findIndex((item) => item.id === over?.id)
+      );
+      setItems(newItems);
+      
+      // 保存到 KV
+      try {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: 'icon_items',
+            value: JSON.stringify(newItems),
+          }),
+        });
+      } catch (error) {
+        console.error('Failed to save icon items:', error);
+      }
     }
+  };
+
+  const handleDelete = async (id: string) => {
+    const newItems = items.filter(item => item.id !== id);
+    setItems(newItems);
+    
+    // 保存到 KV
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'icon_items',
+          value: JSON.stringify(newItems),
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save icon items:', error);
+    }
+  };
+
+  const handleEdit = (item: IconItem) => {
+    setEditingItem(item);
+    setIsEditMode(true);
+    setFormData({
+      url: item.url,
+      name: item.name,
+      iconLogo: item.iconLogo || '',
+      iconImage: item.iconImage || '',
+      iconText: item.iconText || '',
+      iconColor: item.iconColor || '#3b82f6',
+    });
+    setSelectedIconType(item.iconType);
+    setIsDialogOpen(true);
   };
 
   // 从URL获取网站元数据
@@ -422,24 +506,60 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     }
   }, [showColorPicker]);
 
-  const handleSave = (continueAdding: boolean = false) => {
+  const handleSave = async (continueAdding: boolean = false) => {
     if (!formData.url.trim() || !formData.name.trim()) return;
 
-    const newItem: IconItem = {
-      id: Date.now().toString(),
-      name: formData.name.trim(),
-      url: formData.url.trim(),
-      iconType: selectedIconType,
-      iconLogo: formData.iconLogo || undefined,
-      iconImage: formData.iconImage || undefined,
-      iconText: formData.iconText || undefined,
-      iconColor: formData.iconColor || undefined,
-    };
+    let newItems: IconItem[];
 
-    setItems([...items, newItem]);
+    if (isEditMode && editingItem) {
+      // 编辑模式：更新现有图标
+      newItems = items.map(item => 
+        item.id === editingItem.id
+          ? {
+              ...item,
+              name: formData.name.trim(),
+              url: formData.url.trim(),
+              iconType: selectedIconType,
+              iconLogo: formData.iconLogo || undefined,
+              iconImage: formData.iconImage || undefined,
+              iconText: formData.iconText || undefined,
+              iconColor: formData.iconColor || undefined,
+            }
+          : item
+      );
+    } else {
+      // 添加模式：创建新图标
+      const newItem: IconItem = {
+        id: Date.now().toString(),
+        name: formData.name.trim(),
+        url: formData.url.trim(),
+        iconType: selectedIconType,
+        iconLogo: formData.iconLogo || undefined,
+        iconImage: formData.iconImage || undefined,
+        iconText: formData.iconText || undefined,
+        iconColor: formData.iconColor || undefined,
+      };
+      newItems = [...items, newItem];
+    }
 
-    if (continueAdding) {
-      // 重置表单但保持对话框打开
+    setItems(newItems);
+
+    // 保存到 KV
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'icon_items',
+          value: JSON.stringify(newItems),
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save icon items:', error);
+    }
+
+    if (continueAdding && !isEditMode) {
+      // 重置表单但保持对话框打开（仅在添加模式）
       setFormData({
         url: '',
         name: '',
@@ -450,8 +570,10 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
       });
       setSelectedIconType('logo');
     } else {
-      // 关闭对话框
+      // 关闭对话框并重置状态
       setIsDialogOpen(false);
+      setIsEditMode(false);
+      setEditingItem(null);
       setFormData({
         url: '',
         name: '',
@@ -558,6 +680,8 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
                   openInNewTab={openInNewTab}
                   iconStyle={iconStyle}
                   nameMaxWidth={nameMaxWidth}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
                 />
               ))}
               <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} nameMaxWidth={nameMaxWidth} />
@@ -590,9 +714,24 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
             >
               {/* 对话框头部 */}
               <div className="flex items-center justify-between p-6 border-b border-white/20">
-                <h2 className="text-xl font-semibold text-white">添加图标</h2>
+                <h2 className="text-xl font-semibold text-white">
+                  {isEditMode ? '编辑图标' : '添加图标'}
+                </h2>
                 <button
-                  onClick={() => setIsDialogOpen(false)}
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    setIsEditMode(false);
+                    setEditingItem(null);
+                    setFormData({
+                      url: '',
+                      name: '',
+                      iconLogo: '',
+                      iconImage: '',
+                      iconText: '',
+                      iconColor: '#3b82f6',
+                    });
+                    setSelectedIconType('logo');
+                  }}
                   className="w-8 h-8 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-white/80 hover:text-white"
                 >
                   <Cross2Icon className="w-4 h-4" />
@@ -742,16 +881,18 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
                   disabled={!formData.url.trim() || !formData.name.trim()}
                   className="flex-1"
                 >
-                  保存
+                  {isEditMode ? '保存' : '添加'}
                 </Button>
-                <Button
-                  onClick={() => handleSave(true)}
-                  disabled={!formData.url.trim() || !formData.name.trim()}
-                  variant="ghost"
-                  className="flex-1"
-                >
-                  保存并继续
-                </Button>
+                {!isEditMode && (
+                  <Button
+                    onClick={() => handleSave(true)}
+                    disabled={!formData.url.trim() || !formData.name.trim()}
+                    variant="ghost"
+                    className="flex-1"
+                  >
+                    保存并继续
+                  </Button>
+                )}
               </div>
             </motion.div>
           </>
