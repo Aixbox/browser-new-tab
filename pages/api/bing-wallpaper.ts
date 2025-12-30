@@ -1,5 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+// 使用 Edge Runtime（与 UptimeFlare 对齐）
+export const config = {
+  runtime: 'experimental-edge',
+};
+
 interface BingImage {
   url: string;
   urlbase: string;

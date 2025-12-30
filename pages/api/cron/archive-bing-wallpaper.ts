@@ -1,5 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+// 使用 Edge Runtime（与 UptimeFlare 对齐）
+export const config = {
+  runtime: 'experimental-edge',
+};
+
 // 这个 API 应该由 Cloudflare Cron Triggers 或外部定时任务调用
 // 每天自动存档必应壁纸
 

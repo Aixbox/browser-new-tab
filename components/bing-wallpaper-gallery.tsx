@@ -52,7 +52,13 @@ export const BingWallpaperGallery = ({ onSelect }: BingWallpaperGalleryProps) =>
         console.log(`从存档加载第 ${pageNum} 页，返回 ${archiveData.wallpapers.length} 张图片`);
         
         if (archiveData.wallpapers.length > 0) {
-          setWallpapers(prev => [...prev, ...archiveData.wallpapers]);
+          // 去重后添加
+          setWallpapers(prev => {
+            const existing = new Set(prev.map(w => w.urlbase));
+            const newWallpapers = archiveData.wallpapers.filter(w => !existing.has(w.urlbase));
+            console.log(`去重后新增 ${newWallpapers.length} 张图片`);
+            return [...prev, ...newWallpapers];
+          });
           setHasMore(archiveData.hasMore);
           return;
         }
