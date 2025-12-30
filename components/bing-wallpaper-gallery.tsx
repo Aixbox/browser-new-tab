@@ -52,10 +52,10 @@ export const BingWallpaperGallery = ({ onSelect }: BingWallpaperGalleryProps) =>
         console.log(`从存档加载第 ${pageNum} 页，返回 ${archiveData.wallpapers.length} 张图片`);
         
         if (archiveData.wallpapers.length > 0) {
-          // 去重后添加
+          // 去重后添加（使用 date 作为唯一标识）
           setWallpapers(prev => {
-            const existing = new Set(prev.map(w => w.urlbase));
-            const newWallpapers = archiveData.wallpapers.filter(w => !existing.has(w.urlbase));
+            const existing = new Set(prev.map(w => w.date));
+            const newWallpapers = archiveData.wallpapers.filter(w => !existing.has(w.date));
             console.log(`去重后新增 ${newWallpapers.length} 张图片`);
             return [...prev, ...newWallpapers];
           });
@@ -87,19 +87,19 @@ export const BingWallpaperGallery = ({ onSelect }: BingWallpaperGalleryProps) =>
         return;
       }
       
-      // 先检查是否有新图片
-      const existing = new Set(wallpapers.map(w => w.urlbase));
-      const newWallpapers = data.images.filter(w => !existing.has(w.urlbase));
-      console.log(`去重后新增 ${newWallpapers.length} 张图片`);
-      
-      if (newWallpapers.length === 0) {
-        console.log('没有新图片，停止加载');
-        setHasMore(false);
-        return;
-      }
-      
-      // 有新图片，添加到列表
-      setWallpapers(prev => [...prev, ...newWallpapers]);
+      // 去重后添加（使用 date 作为唯一标识）
+      setWallpapers(prev => {
+        const existing = new Set(prev.map(w => w.date));
+        const newWallpapers = data.images.filter(w => !existing.has(w.date));
+        console.log(`去重后新增 ${newWallpapers.length} 张图片`);
+        
+        if (newWallpapers.length === 0) {
+          console.log('没有新图片，停止加载');
+          setHasMore(false);
+        }
+        
+        return [...prev, ...newWallpapers];
+      });
       
       // 如果返回的图片少于8张，说明没有更多了
       if (data.images.length < 8) {
@@ -184,7 +184,7 @@ export const BingWallpaperGallery = ({ onSelect }: BingWallpaperGalleryProps) =>
       <div className="grid grid-cols-2 gap-4">
         {wallpapers.map((wallpaper, index) => (
           <div
-            key={`${wallpaper.urlbase}-${index}`}
+            key={wallpaper.date}
             className="group relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 border-white/10 hover:border-white/30 transition-all duration-300"
             onClick={() => setSelectedImage(wallpaper)}
           >

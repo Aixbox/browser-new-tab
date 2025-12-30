@@ -1,9 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextRequest } from 'next/server';
 
-// 使用 Edge Runtime（与 UptimeFlare 对齐）
-export const config = {
-  runtime: 'experimental-edge',
-};
+export const runtime = 'edge';
 
 interface BingImage {
   url: string;
@@ -19,27 +16,26 @@ interface BingResponse {
   images: BingImage[];
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+export default async function handler(request: NextRequest) {
+  if (request.method !== 'GET') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
-    const { 
-      market = 'zh-CN', 
-      resolution = '1920x1080',
-      idx = '0',
-      n = '8'
-    } = req.query;
+    const url = new URL(request.url);
+    const market = url.searchParams.get('market') || 'zh-CN';
+    const resolution = url.searchParams.get('resolution') || '1920x1080';
+    const idx = url.searchParams.get('idx') || '0';
+    const n = url.searchParams.get('n') || '8';
     
     // 使用必应官方 API
     // idx: 从今天开始往前数的天数 (0=今天, 1=昨天, 最大7)
     // n: 返回的图片数量 (最大8)
     // 注意：idx 和 n 配合使用，idx=0&n=8 会返回从今天开始往前的8天
-    const bingApiUrl = `https://www.bing.com/HPImageArchive.aspx?format=js&idx=${idx}&n=${n}&mkt=${market}`;
+    const bingApiUrl = `https://cn.bing.com/HPImageArchive.aspx?format=js&idx=${idx}&n=${n}&mkt=${market}`;
     
     const response = await fetch(bingApiUrl);
     
@@ -63,7 +59,7 @@ export default async function handler(
 
     const images = Array.from(uniqueImages.values()).map(image => {
       // 直接使用必应返回的 URL
-      const imageUrl = `https://www.bing.com${image.url}`;
+      const imageUrl = `https://cn.bing.com${image.url}`;
       
       return {
         url: imageUrl,
@@ -76,15 +72,21 @@ export default async function handler(
       };
     });
 
-    return res.status(200).json({
-      images,
-      total: images.length,
-    });
+    return new Response(
+      JSON.stringify({
+        images,
+        total: images.length,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     console.error('Error fetching Bing wallpaper:', error);
-    return res.status(500).json({ 
-      error: 'Failed to fetch Bing wallpaper',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return new Response(
+      JSON.stringify({ 
+        error: 'Failed to fetch Bing wallpaper',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }

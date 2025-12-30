@@ -1,10 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextRequest } from 'next/server';
 import { KVNamespace } from '@cloudflare/workers-types';
 
-// 使用 Edge Runtime（与 UptimeFlare 对齐）
-export const config = {
-  runtime: 'experimental-edge',
-};
+export const runtime = 'edge';
 
 interface BingImage {
   url: string;
@@ -31,32 +28,32 @@ interface ArchivedWallpaper {
   archivedAt: string;
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+export default async function handler(request: NextRequest) {
   const { NEWTAB_KV } = process.env as unknown as {
     NEWTAB_KV: KVNamespace;
   };
 
   if (!NEWTAB_KV) {
-    return res.status(500).json({ error: 'KV storage not configured' });
+    return new Response(
+      JSON.stringify({ error: 'KV storage not configured' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   // GET: 获取存档的壁纸
-  if (req.method === 'GET') {
+  if (request.method === 'GET') {
     try {
-      const { page = '0', limit = '20' } = req.query;
-      const pageNum = parseInt(page as string);
-      const limitNum = parseInt(limit as string);
+      const url = new URL(request.url);
+      const page = parseInt(url.searchParams.get('page') || '0');
+      const limit = parseInt(url.searchParams.get('limit') || '20');
 
       // 从 KV 读取存档列表
       const archiveListStr = await NEWTAB_KV.get('bing_wallpaper_archive_list');
       const archiveList: string[] = archiveListStr ? JSON.parse(archiveListStr) : [];
 
       // 分页
-      const start = pageNum * limitNum;
-      const end = start + limitNum;
+      const start = page * limit;
+      const end = start + limit;
       const pageKeys = archiveList.slice(start, end);
 
       // 批量读取壁纸数据
@@ -68,23 +65,30 @@ export default async function handler(
         }
       }
 
-      return res.status(200).json({
-        wallpapers,
-        total: archiveList.length,
-        page: pageNum,
-        hasMore: end < archiveList.length,
-      });
+      return new Response(
+        JSON.stringify({
+          wallpapers,
+          total: archiveList.length,
+          page,
+          hasMore: end < archiveList.length,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
     } catch (error) {
       console.error('Failed to get archived wallpapers:', error);
-      return res.status(500).json({ error: 'Failed to get archived wallpapers' });
+      return new Response(
+        JSON.stringify({ error: 'Failed to get archived wallpapers' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
     }
   }
 
   // POST: 存档新壁纸（定时任务调用）
-  if (req.method === 'POST') {
+  if (request.method === 'POST') {
     try {
       // 获取最近16天的壁纸
-      const bingApiUrl = `https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=16&mkt=zh-CN`;
+      // idx=-1 可以获取最新的壁纸（包括今天）
+      const bingApiUrl = `https://cn.bing.com/HPImageArchive.aspx?format=js&idx=-1&n=16&mkt=zh-CN`;
       const response = await fetch(bingApiUrl);
       
       if (!response.ok) {
@@ -94,7 +98,10 @@ export default async function handler(
       const data = await response.json() as BingResponse;
       
       if (!data.images || data.images.length === 0) {
-        return res.status(200).json({ message: 'No new wallpapers', archived: 0 });
+        return new Response(
+          JSON.stringify({ message: 'No new wallpapers', archived: 0 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
       }
 
       // 读取现有存档列表
@@ -108,12 +115,14 @@ export default async function handler(
       for (const image of data.images) {
         const date = image.startdate;
         
+        console.log(`处理壁纸: ${date}, 已存在: ${existingDates.has(date)}`);
+        
         // 如果已存档，跳过
         if (existingDates.has(date)) {
           continue;
         }
 
-        const imageUrl = `https://www.bing.com${image.url}`;
+        const imageUrl = `https://cn.bing.com${image.url}`;
         
         const wallpaper: ArchivedWallpaper = {
           url: imageUrl,
@@ -129,6 +138,8 @@ export default async function handler(
         // 存储壁纸数据
         await NEWTAB_KV.put(`bing_wallpaper_${date}`, JSON.stringify(wallpaper));
         
+        console.log(`✅ 已存档: ${date}`);
+        
         // 添加到列表（最新的在前面）
         archiveList.unshift(date);
         archivedCount++;
@@ -139,19 +150,28 @@ export default async function handler(
         await NEWTAB_KV.put('bing_wallpaper_archive_list', JSON.stringify(archiveList));
       }
 
-      return res.status(200).json({
-        message: 'Wallpapers archived successfully',
-        archived: archivedCount,
-        total: archiveList.length,
-      });
+      return new Response(
+        JSON.stringify({
+          message: 'Wallpapers archived successfully',
+          archived: archivedCount,
+          total: archiveList.length,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
     } catch (error) {
       console.error('Failed to archive wallpapers:', error);
-      return res.status(500).json({ 
-        error: 'Failed to archive wallpapers',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to archive wallpapers',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
     }
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  return new Response(
+    JSON.stringify({ error: 'Method not allowed' }),
+    { status: 405, headers: { 'Content-Type': 'application/json' } }
+  );
 }

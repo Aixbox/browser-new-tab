@@ -54,7 +54,7 @@ jobs:
         id: fetch
         run: |
           # 获取最近 16 天的壁纸
-          response=$(curl -s "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=16&mkt=zh-CN")
+          response=$(curl -s "https://cn.bing.com/HPImageArchive.aspx?format=js&idx=0&n=16&mkt=zh-CN")
           echo "$response" > bing_data.json
 
       - name: Get Existing Archive List
@@ -92,7 +92,7 @@ jobs:
               continue;
             }
             
-            const imageUrl = `https://www.bing.com${image.url}`;
+            const imageUrl = `https://cn.bing.com${image.url}`;
             const wallpaper = {
               url: imageUrl,
               thumbnail: imageUrl,
