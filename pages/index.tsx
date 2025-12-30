@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import Head from "next/head";
 import { KVNamespace } from '@cloudflare/workers-types';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { Background } from "@/components/background";
 import { SidebarDemo } from "@/components/sidebar-demo";
 import { SearchEngine } from "@/components/search-engine";
 import { SimpleTimeDisplay } from "@/components/simple-time-display";
 import { DraggableGrid } from "@/components/draggable-grid";
 import { SettingsDialog } from "@/components/settings-drawer";
+import { Dock } from "@/components/dock";
 import { SidebarItem } from "@/components/custom-sidebar";
 import { GearIcon } from "@radix-ui/react-icons";
 import type { IconStyleSettings } from "@/components/icon-settings";
@@ -37,6 +39,56 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   const [currentBackgroundUrl, setCurrentBackgroundUrl] = useState<string | null>(backgroundUrl);
   const [currentSidebarSettings, setCurrentSidebarSettings] = useState<SidebarSettings>(sidebarSettings);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [dockItems, setDockItems] = useState<any[]>([]);
+  const [gridItems, setGridItems] = useState<any[]>(iconItems || []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    // 检查是否拖拽到 Dock
+    if (over?.id === 'dock-droppable') {
+      const draggedItem = gridItems.find(item => item.id === active.id);
+      if (draggedItem && !dockItems.find(dockItem => dockItem.id === draggedItem.id)) {
+        setDockItems([...dockItems, draggedItem]);
+      }
+      return;
+    }
+
+    // Grid 内部排序
+    if (active.id !== over?.id && over?.id) {
+      const oldIndex = gridItems.findIndex((item) => item.id === active.id);
+      const newIndex = gridItems.findIndex((item) => item.id === over.id);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newItems = [...gridItems];
+        const [movedItem] = newItems.splice(oldIndex, 1);
+        newItems.splice(newIndex, 0, movedItem);
+        setGridItems(newItems);
+        
+        // 保存到 KV
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'icon_items',
+              value: JSON.stringify(newItems),
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to save icon items:', error);
+        }
+      }
+    }
+  };
 
   // 监听布局模式变化
   useEffect(() => {
@@ -130,99 +182,121 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       </Head>
 
       <main className="h-dvh w-full" onContextMenu={handleContextMenu}>
-        <div className="relative h-full w-full">
-          <Background 
-            src={currentBackgroundUrl || "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/alt-g7Cv2QzqL3k6ey3igjNYkM32d8Fld7.mp4"}
-            placeholder="/alt-placeholder.png" 
-          />
-          
-          {/* 组件模式 */}
-          {currentLayoutMode === 'component' && (
-            <>
-              <div 
-                className={`absolute top-0 ${currentSidebarSettings.position === 'left' ? 'left-0' : 'right-0'} h-full transition-transform duration-300 z-20`}
-                style={{
-                  transform: isSidebarVisible ? 'translateX(0)' : currentSidebarSettings.position === 'left' ? 'translateX(-100%)' : 'translateX(100%)',
-                  width: `${currentSidebarSettings.width}px`
-                }}
-              >
-                <SidebarDemo 
-                  onAvatarClick={() => setIsSettingsOpen(true)}
-                  avatarUrl={avatarUrl}
-                  initialSidebarItems={sidebarItems}
-                  wheelScroll={currentSidebarSettings.wheelScroll}
-                  width={currentSidebarSettings.width}
-                />
-              </div>
-              <div 
-                className="h-full w-full relative flex flex-col"
-                style={{
-                  [currentSidebarSettings.position === 'left' ? 'paddingLeft' : 'paddingRight']: `${currentSidebarSettings.width}px`
-                }}
-              >
-                {/* 顶部区域：时间和搜索框 */}
-                <div className="flex-shrink-0 flex flex-col items-center justify-center pt-12 pb-8 gap-6">
-                  <SimpleTimeDisplay />
-                  <SearchEngine openInNewTab={openInNewTab.search} />
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="relative h-full w-full">
+            <Background 
+              src={currentBackgroundUrl || "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/alt-g7Cv2QzqL3k6ey3igjNYkM32d8Fld7.mp4"}
+              placeholder="/alt-placeholder.png" 
+            />
+            
+            {/* 组件模式 */}
+            {currentLayoutMode === 'component' && (
+              <>
+                <div 
+                  className={`absolute top-0 ${currentSidebarSettings.position === 'left' ? 'left-0' : 'right-0'} h-full transition-transform duration-300 z-20`}
+                  style={{
+                    transform: isSidebarVisible ? 'translateX(0)' : currentSidebarSettings.position === 'left' ? 'translateX(-100%)' : 'translateX(100%)',
+                    width: `${currentSidebarSettings.width}px`
+                  }}
+                >
+                  <SidebarDemo 
+                    onAvatarClick={() => setIsSettingsOpen(true)}
+                    avatarUrl={avatarUrl}
+                    initialSidebarItems={sidebarItems}
+                    wheelScroll={currentSidebarSettings.wheelScroll}
+                    width={currentSidebarSettings.width}
+                  />
                 </div>
-                
-                {/* 图标网格区域 */}
-                <div className="flex-1 overflow-y-auto flex justify-center px-8 pb-8">
-                  <div 
-                    className="w-full"
-                    style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
-                  >
-                    <DraggableGrid openInNewTab={openInNewTab.icon} iconStyle={currentIconStyle} initialItems={iconItems || []} />
+                <div 
+                  className="h-full w-full relative flex flex-col"
+                  style={{
+                    [currentSidebarSettings.position === 'left' ? 'paddingLeft' : 'paddingRight']: `${currentSidebarSettings.width}px`
+                  }}
+                >
+                  {/* 顶部区域：时间和搜索框 */}
+                  <div className="flex-shrink-0 flex flex-col items-center justify-center pt-12 pb-8 gap-6">
+                    <SimpleTimeDisplay />
+                    <SearchEngine openInNewTab={openInNewTab.search} />
+                  </div>
+                  
+                  {/* 图标网格区域 */}
+                  <div className="flex-1 overflow-y-auto flex justify-center px-8 pb-8">
+                    <div 
+                      className="w-full"
+                      style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
+                    >
+                      <DraggableGrid 
+                        openInNewTab={openInNewTab.icon} 
+                        iconStyle={currentIconStyle} 
+                        initialItems={gridItems}
+                        onItemsChange={setGridItems}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dock 栏 */}
+                  <div className="flex-shrink-0">
+                    <Dock 
+                      items={dockItems}
+                      onItemsChange={setDockItems}
+                      openInNewTab={openInNewTab.icon}
+                      iconStyle={currentIconStyle}
+                    />
                   </div>
                 </div>
+              </>
+            )}
+
+            {/* 极简模式 */}
+            {currentLayoutMode === 'minimal' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 p-8 z-10">
+                <SimpleTimeDisplay />
+                <SearchEngine openInNewTab={openInNewTab.search} />
               </div>
-            </>
-          )}
+            )}
 
-          {/* 极简模式 */}
-          {currentLayoutMode === 'minimal' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 p-8 z-10">
-              <SimpleTimeDisplay />
-              <SearchEngine openInNewTab={openInNewTab.search} />
-            </div>
-          )}
-
-          {/* 右键菜单 */}
-          {contextMenuPosition && (
-            <div
-              className="fixed bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-lg shadow-xl z-[100] py-1 min-w-[160px]"
-              style={{
-                left: `${contextMenuPosition.x}px`,
-                top: `${contextMenuPosition.y}px`,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => {
-                  setIsSettingsOpen(true);
-                  setContextMenuPosition(null);
+            {/* 右键菜单 */}
+            {contextMenuPosition && (
+              <div
+                className="fixed bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-lg shadow-xl z-[100] py-1 min-w-[160px]"
+                style={{
+                  left: `${contextMenuPosition.x}px`,
+                  top: `${contextMenuPosition.y}px`,
                 }}
-                className="w-full px-4 py-2 text-left text-white hover:bg-white/10 transition-colors flex items-center gap-3"
+                onClick={(e) => e.stopPropagation()}
               >
-                <GearIcon className="w-4 h-4" />
-                <span>设置</span>
-              </button>
-            </div>
-          )}
-          
-          {/* 设置对话框 */}
-          <SettingsDialog 
-            isOpen={isSettingsOpen} 
-            onOpenChange={setIsSettingsOpen}
-            initialAvatarUrl={avatarUrl}
-            hasSecretKey={hasSecretKey}
-            initialOpenInNewTab={openInNewTab}
-            initialLayoutMode={layoutMode}
-            initialIconStyle={iconStyle}
-            initialBackgroundUrl={backgroundUrl}
-            initialSidebarSettings={sidebarSettings}
-          />
-        </div>
+                <button
+                  onClick={() => {
+                    setIsSettingsOpen(true);
+                    setContextMenuPosition(null);
+                  }}
+                  className="w-full px-4 py-2 text-left text-white hover:bg-white/10 transition-colors flex items-center gap-3"
+                >
+                  <GearIcon className="w-4 h-4" />
+                  <span>设置</span>
+                </button>
+              </div>
+            )}
+            
+            {/* 设置对话框 */}
+            <SettingsDialog 
+              isOpen={isSettingsOpen} 
+              onOpenChange={setIsSettingsOpen}
+              initialAvatarUrl={avatarUrl}
+              hasSecretKey={hasSecretKey}
+              initialOpenInNewTab={openInNewTab}
+              initialLayoutMode={layoutMode}
+              initialIconStyle={iconStyle}
+              initialBackgroundUrl={backgroundUrl}
+              initialSidebarSettings={sidebarSettings}
+            />
+
+          </div>
+        </DndContext>
       </main>
     </>
   );
@@ -239,7 +313,7 @@ export async function getServerSideProps() {
   let sidebarItems: SidebarItem[] | null = null;
   let openInNewTab = { search: true, icon: true }; // 默认都在新标签页打开
   let layoutMode: 'component' | 'minimal' = 'component'; // 默认组件模式
-  let iconStyle: IconStyleSettings = { size: 80, borderRadius: 12, opacity: 100, spacing: 16, showName: true, nameSize: 12, nameColor: '#ffffff', maxWidth: 1500 }; // 默认图标样式
+  let iconStyle: IconStyleSettings = { size: 80, borderRadius: 12, opacity: 100, spacing: 16, showName: true, nameSize: 12, nameColor: '#ffffff', maxWidth: 1500, dockShowName: false }; // 默认图标样式
   let backgroundUrl: string | null = null; // 默认背景
   let sidebarSettings: SidebarSettings = { position: 'left', autoHide: false, wheelScroll: false, width: 64 }; // 默认侧边栏设置
   let iconItems: any[] | null = null; // 图标数据
@@ -283,6 +357,7 @@ export async function getServerSideProps() {
           nameSize: style.nameSize ?? 12,
           nameColor: style.nameColor ?? '#ffffff',
           maxWidth: style.maxWidth ?? 1500,
+          dockShowName: style.dockShowName ?? false,
         };
       }
 

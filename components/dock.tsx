@@ -1,0 +1,212 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useDroppable } from "@dnd-kit/core";
+import { GlobeIcon } from "@radix-ui/react-icons";
+import { cn } from "@/lib/utils";
+
+// 图标加载组件
+const IconImage = ({ src, alt, className, style }: { 
+  src: string; 
+  alt: string; 
+  className?: string;
+  style?: React.CSSProperties;
+}) => {
+  const [hasError, setHasError] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
+
+  const handleError = () => {
+    if (!useProxy) {
+      setUseProxy(true);
+      setHasError(false);
+    } else {
+      setHasError(true);
+    }
+  };
+
+  if (hasError) {
+    return (
+      <div className={cn("flex items-center justify-center bg-white/5", className)} style={style}>
+        <GlobeIcon className="w-6 h-6 text-white" />
+      </div>
+    );
+  }
+
+  const imageUrl = useProxy ? `/api/icon?url=${encodeURIComponent(src)}` : src;
+
+  return (
+    <img 
+      src={imageUrl}
+      alt={alt}
+      className={className}
+      style={style}
+      onError={handleError}
+    />
+  );
+};
+
+interface DockItem {
+  id: string;
+  name: string;
+  url: string;
+  iconType: 'logo' | 'image' | 'text';
+  iconLogo?: string;
+  iconImage?: string;
+  iconText?: string;
+  iconColor?: string;
+}
+
+interface DockProps {
+  items: DockItem[];
+  onItemsChange: (items: DockItem[]) => void;
+  openInNewTab?: boolean;
+  iconStyle?: { size: number; borderRadius: number; opacity: number; showName: boolean; nameSize: number; nameColor: string; dockShowName: boolean };
+}
+
+export const Dock = ({ items, onItemsChange, openInNewTab = true, iconStyle }: DockProps) => {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'dock-droppable',
+  });
+
+  const iconSize = iconStyle?.size || 80; // 使用宫格的图标大小
+  const iconSpacing = 16; // 图标间距
+  const nameSize = iconStyle?.nameSize || 12; // 使用宫格的名称大小
+  const nameColor = iconStyle?.nameColor || '#ffffff'; // 使用宫格的名称颜色
+  const showName = iconStyle?.dockShowName ?? false; // Dock 栏独立的名称显示开关
+  const borderRadius = iconStyle?.borderRadius || 12;
+  const opacity = (iconStyle?.opacity || 100) / 100;
+
+  const renderIcon = (item: DockItem, index: number) => {
+    const isHovered = hoveredIndex === index;
+
+    const iconStyle_css = {
+      width: `${iconSize}px`,
+      height: `${iconSize}px`,
+      borderRadius: `${borderRadius}px`,
+      opacity: opacity,
+    };
+
+    const iconElement = (() => {
+      if (item.iconType === 'text' && item.iconText && item.iconColor) {
+        return (
+          <div 
+            className="flex items-center justify-center text-white font-semibold overflow-hidden"
+            style={{
+              ...iconStyle_css,
+              backgroundColor: item.iconColor,
+              fontSize: `${iconSize / 4}px`,
+            }}
+          >
+            {item.iconText}
+          </div>
+        );
+      }
+
+      if (item.iconType === 'image' && item.iconImage) {
+        return (
+          <IconImage 
+            src={item.iconImage}
+            alt={item.name}
+            className="object-cover"
+            style={iconStyle_css}
+          />
+        );
+      }
+
+      if (item.iconType === 'logo' && item.iconLogo) {
+        return (
+          <IconImage 
+            src={item.iconLogo}
+            alt={item.name}
+            className="object-contain"
+            style={iconStyle_css}
+          />
+        );
+      }
+
+      return (
+        <div 
+          className="flex items-center justify-center bg-white/5"
+          style={iconStyle_css}
+        >
+          <GlobeIcon className="w-6 h-6 text-white" />
+        </div>
+      );
+    })();
+
+    return (
+      <div className="flex flex-col items-center">
+        <div
+          className="cursor-pointer relative hover:opacity-80 transition-opacity"
+          onClick={() => handleIconClick(item)}
+          onMouseEnter={() => setHoveredIndex(index)}
+          onMouseLeave={() => setHoveredIndex(null)}
+        >
+          {iconElement}
+        </div>
+        {showName && (
+          <span 
+            className="text-center font-medium leading-tight mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap"
+            style={{
+              fontSize: `${nameSize}px`,
+              color: nameColor,
+              width: `${iconSize + 20}px`,
+            }}
+          >
+            {item.name}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const handleIconClick = (item: DockItem) => {
+    const target = openInNewTab ? '_blank' : '_self';
+    window.open(item.url, target);
+  };
+
+  return (
+    <motion.div
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      className="w-full flex justify-center py-4"
+    >
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl px-3 py-3 transition-all duration-300",
+          isOver && "bg-white/20 border-white/40 scale-105"
+        )}
+      >
+        <div 
+          className="flex items-end"
+          style={{ gap: `${iconSpacing}px` }}
+        >
+          <AnimatePresence mode="popLayout">
+            {items.map((item, index) => (
+              <motion.div
+                key={item.id}
+                layout
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              >
+                {renderIcon(item, index)}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          
+          {items.length === 0 && (
+            <div className="text-white/60 text-sm px-6 py-8">
+              拖动图标到这里
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};

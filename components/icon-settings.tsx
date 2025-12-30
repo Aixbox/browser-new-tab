@@ -20,6 +20,7 @@ export interface IconStyleSettings {
   nameSize: number;
   nameColor: string;
   maxWidth: number;
+  dockShowName: boolean;
 }
 
 export const IconSettings = ({ 
@@ -38,6 +39,7 @@ export const IconSettings = ({
     nameSize: 12,
     nameColor: '#ffffff',
     maxWidth: 1500,
+    dockShowName: false,
   };
 
   const [iconStyle, setIconStyle] = useState<IconStyleSettings>(initialIconStyle || defaultSettings);
@@ -357,6 +359,20 @@ export const IconSettings = ({
             id="show-name"
             checked={iconStyle.showName}
             onCheckedChange={(checked) => handleStyleChange('showName', checked)}
+          />
+        </div>
+      </div>
+
+      {/* Dock栏名称开关 */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-4">
+          <Label htmlFor="dock-show-name" className="text-white font-medium w-20 flex-shrink-0">
+            Dock名称
+          </Label>
+          <Switch
+            id="dock-show-name"
+            checked={iconStyle.dockShowName}
+            onCheckedChange={(checked) => handleStyleChange('dockShowName', checked)}
           />
         </div>
       </div>

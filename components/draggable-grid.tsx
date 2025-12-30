@@ -3,16 +3,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { HexColorPicker } from "react-colorful";
 import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   rectSortingStrategy,
@@ -319,10 +309,11 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
   );
 };
 
-export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, initialItems }: { 
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, initialItems, onItemsChange }: { 
   openInNewTab?: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
   initialItems?: IconItem[];
+  onItemsChange?: (items: IconItem[]) => void;
 }) => {
   const [items, setItems] = useState<IconItem[]>(initialItems || []);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -369,43 +360,12 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     '#84cc16', // 黄绿色
   ];
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (active.id !== over?.id) {
-      const newItems = arrayMove(
-        items,
-        items.findIndex((item) => item.id === active.id),
-        items.findIndex((item) => item.id === over?.id)
-      );
-      setItems(newItems);
-      
-      // 保存到 KV
-      try {
-        await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            key: 'icon_items',
-            value: JSON.stringify(newItems),
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to save icon items:', error);
-      }
+  // 监听 items 变化，通知父组件
+  useEffect(() => {
+    if (onItemsChange) {
+      onItemsChange(items);
     }
-  };
+  }, [items, onItemsChange]);
 
   const handleDelete = async (id: string) => {
     const newItems = items.filter(item => item.id !== id);
@@ -660,34 +620,28 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   return (
     <>
       <div className="w-full">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={items} strategy={rectSortingStrategy}>
-            <div 
-              className="grid w-full"
-              style={{
-                gridTemplateColumns: `repeat(auto-fill, ${gridMinSize}px)`,
-                gap: `${iconSpacing}px`
-              }}
-            >
-              {items.map((item) => (
-                <DraggableItem
-                  key={item.id}
-                  item={item}
-                  openInNewTab={openInNewTab}
-                  iconStyle={iconStyle}
-                  nameMaxWidth={nameMaxWidth}
-                  onDelete={handleDelete}
-                  onEdit={handleEdit}
-                />
-              ))}
-              <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} nameMaxWidth={nameMaxWidth} />
-            </div>
-          </SortableContext>
-        </DndContext>
+        <SortableContext items={items} strategy={rectSortingStrategy}>
+          <div 
+            className="grid w-full"
+            style={{
+              gridTemplateColumns: `repeat(auto-fill, ${gridMinSize}px)`,
+              gap: `${iconSpacing}px`
+            }}
+          >
+            {items.map((item) => (
+              <DraggableItem
+                key={item.id}
+                item={item}
+                openInNewTab={openInNewTab}
+                iconStyle={iconStyle}
+                nameMaxWidth={nameMaxWidth}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+              />
+            ))}
+            <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} nameMaxWidth={nameMaxWidth} />
+          </div>
+        </SortableContext>
       </div>
 
       {/* 添加图标对话框 */}
