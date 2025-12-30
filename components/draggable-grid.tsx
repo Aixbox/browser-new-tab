@@ -4,12 +4,12 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { HexColorPicker } from "react-colorful";
 import {
   SortableContext,
-  sortableKeyboardCoordinates,
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
   useSortable,
 } from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GlobeIcon, PlusIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
@@ -129,7 +129,7 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0 : 1, // 拖拽时完全隐藏
   };
 
   const renderIcon = () => {
@@ -336,6 +336,16 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   const colorButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
 
+  // 让宫格区域成为 droppable
+  const { setNodeRef: setGridDroppableRef, isOver: isGridOver } = useDroppable({
+    id: 'grid-droppable',
+  });
+
+  // 当 initialItems 变化时更新内部状态（页面切换时）
+  useEffect(() => {
+    setItems(initialItems || []);
+  }, [initialItems]);
+
   // 监听设置变化
   useEffect(() => {
     const handleSettingsChange = (e: CustomEvent) => {
@@ -360,29 +370,13 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     '#84cc16', // 黄绿色
   ];
 
-  // 监听 items 变化，通知父组件
-  useEffect(() => {
-    if (onItemsChange) {
-      onItemsChange(items);
-    }
-  }, [items, onItemsChange]);
-
   const handleDelete = async (id: string) => {
     const newItems = items.filter(item => item.id !== id);
     setItems(newItems);
     
-    // 保存到 KV
-    try {
-      await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: 'icon_items',
-          value: JSON.stringify(newItems),
-        }),
-      });
-    } catch (error) {
-      console.error('Failed to save icon items:', error);
+    // 通知父组件
+    if (onItemsChange) {
+      onItemsChange(newItems);
     }
   };
 
@@ -504,18 +498,9 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
 
     setItems(newItems);
 
-    // 保存到 KV
-    try {
-      await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: 'icon_items',
-          value: JSON.stringify(newItems),
-        }),
-      });
-    } catch (error) {
-      console.error('Failed to save icon items:', error);
+    // 通知父组件
+    if (onItemsChange) {
+      onItemsChange(newItems);
     }
 
     if (continueAdding && !isEditMode) {
@@ -619,10 +604,13 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
 
   return (
     <>
-      <div className="w-full">
+      <div className="w-full" ref={setGridDroppableRef}>
         <SortableContext items={items} strategy={rectSortingStrategy}>
           <div 
-            className="grid w-full"
+            className={cn(
+              "grid w-full transition-all duration-200",
+              isGridOver && "bg-white/5 rounded-lg"
+            )}
             style={{
               gridTemplateColumns: `repeat(auto-fill, ${gridMinSize}px)`,
               gap: `${iconSpacing}px`

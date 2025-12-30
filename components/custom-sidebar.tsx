@@ -51,6 +51,7 @@ interface CustomSidebarProps {
   className?: string;
   wheelScroll?: boolean;
   width?: number;
+  onPageChange?: (pageId: string) => void;
 }
 
 const defaultItems: SidebarItem[] = [
@@ -66,7 +67,8 @@ export const CustomSidebar = ({
   avatarUrl,
   className,
   wheelScroll = false,
-  width = 64
+  width = 64,
+  onPageChange
 }: CustomSidebarProps) => {
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>(items);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -78,6 +80,29 @@ export const CustomSidebar = ({
   const [avatarError, setAvatarError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // 初始化时选中第一个按钮（只执行一次）
+  useEffect(() => {
+    if (items.length > 0 && selectedItemId === null) {
+      const firstItemId = items[0].id;
+      setSelectedItemId(firstItemId);
+      onPageChange?.(firstItemId);
+    }
+  }, []); // 空依赖数组，只在挂载时执行
+
+  // 当 items 从外部变化时更新本地状态
+  useEffect(() => {
+    setSidebarItems(items);
+  }, [items]);
+
+  // 当选中的项被删除时，选中第一个
+  useEffect(() => {
+    if (selectedItemId && items.length > 0 && !items.find(item => item.id === selectedItemId)) {
+      const firstItemId = items[0].id;
+      setSelectedItemId(firstItemId);
+      onPageChange?.(firstItemId);
+    }
+  }, [items, selectedItemId, onPageChange]);
 
   // 当 avatarUrl 改变时重置错误状态
   useEffect(() => {
@@ -109,9 +134,13 @@ export const CustomSidebar = ({
   // 当滚轮切换时，自动选中当前项
   useEffect(() => {
     if (wheelScroll && sidebarItems[currentIndex]) {
-      setSelectedItemId(sidebarItems[currentIndex].id);
+      const itemId = sidebarItems[currentIndex].id;
+      setSelectedItemId(itemId);
+      if (onPageChange) {
+        onPageChange(itemId);
+      }
     }
-  }, [currentIndex, wheelScroll, sidebarItems]);
+  }, [currentIndex, wheelScroll, sidebarItems, onPageChange]);
 
   const handleAddItem = () => {
     if (!newItemTitle.trim()) return;
@@ -147,8 +176,9 @@ export const CustomSidebar = ({
   };
 
   const handleItemClick = (item: SidebarItem) => {
-    // 选中项目
+    // 选中项目并触发页面切换
     setSelectedItemId(item.id);
+    onPageChange?.(item.id);
     item.onClick?.();
   };
 

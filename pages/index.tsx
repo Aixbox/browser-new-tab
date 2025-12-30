@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Head from "next/head";
 import { KVNamespace } from '@cloudflare/workers-types';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { Background } from "@/components/background";
 import { SidebarDemo } from "@/components/sidebar-demo";
 import { SearchEngine } from "@/components/search-engine";
@@ -41,6 +41,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [dockItems, setDockItems] = useState<any[]>([]);
   const [gridItems, setGridItems] = useState<any[]>(iconItems || []);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -50,20 +51,76 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     })
   );
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    
+    setActiveId(null);
 
-    // 检查是否拖拽到 Dock
-    if (over?.id === 'dock-droppable') {
-      const draggedItem = gridItems.find(item => item.id === active.id);
-      if (draggedItem && !dockItems.find(dockItem => dockItem.id === draggedItem.id)) {
-        setDockItems([...dockItems, draggedItem]);
+    const draggedFromGrid = gridItems.find(item => item.id === active.id);
+    const draggedFromDock = dockItems.find(item => item.id === active.id);
+
+    // 从宫格拖到 Dock
+    if (over?.id === 'dock-droppable' && draggedFromGrid) {
+      if (!dockItems.find(dockItem => dockItem.id === draggedFromGrid.id)) {
+        // 添加到 Dock
+        const newDockItems = [...dockItems, draggedFromGrid];
+        setDockItems(newDockItems);
+        
+        // 从宫格移除
+        const newGridItems = gridItems.filter(item => item.id !== active.id);
+        setGridItems(newGridItems);
+        
+        // 保存到 KV
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'icon_items',
+              value: JSON.stringify(newGridItems),
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to save icon items:', error);
+        }
+      }
+      return;
+    }
+
+    // 从 Dock 拖回宫格
+    if (over?.id === 'grid-droppable' && draggedFromDock) {
+      if (!gridItems.find(item => item.id === draggedFromDock.id)) {
+        // 添加到宫格
+        const newGridItems = [...gridItems, draggedFromDock];
+        setGridItems(newGridItems);
+        
+        // 从 Dock 移除
+        const newDockItems = dockItems.filter(item => item.id !== active.id);
+        setDockItems(newDockItems);
+        
+        // 保存到 KV
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'icon_items',
+              value: JSON.stringify(newGridItems),
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to save icon items:', error);
+        }
       }
       return;
     }
 
     // Grid 内部排序
-    if (active.id !== over?.id && over?.id) {
+    if (draggedFromGrid && active.id !== over?.id && over?.id) {
       const oldIndex = gridItems.findIndex((item) => item.id === active.id);
       const newIndex = gridItems.findIndex((item) => item.id === over.id);
       
@@ -86,6 +143,22 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         } catch (error) {
           console.error('Failed to save icon items:', error);
         }
+      }
+    }
+
+    // Dock 内部排序
+    if (draggedFromDock && active.id !== over?.id && over?.id) {
+      const oldIndex = dockItems.findIndex((item) => item.id === active.id);
+      const newIndex = dockItems.findIndex((item) => item.id === over.id);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newItems = [...dockItems];
+        const [movedItem] = newItems.splice(oldIndex, 1);
+        newItems.splice(newIndex, 0, movedItem);
+        setDockItems(newItems);
+        
+        // 保存到 KV（这里需要保存 Dock 数据）
+        // TODO: 添加保存 Dock 数据的逻辑
       }
     }
   };
@@ -185,6 +258,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
           <div className="relative h-full w-full">
@@ -212,7 +286,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                   />
                 </div>
                 <div 
-                  className="h-full w-full relative flex flex-col"
+                  className="h-full w-full relative flex flex-col overflow-hidden"
                   style={{
                     [currentSidebarSettings.position === 'left' ? 'paddingLeft' : 'paddingRight']: `${currentSidebarSettings.width}px`
                   }}
@@ -224,7 +298,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                   </div>
                   
                   {/* 图标网格区域 */}
-                  <div className="flex-1 overflow-y-auto flex justify-center px-8 pb-8">
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden flex justify-center px-8 pb-8">
                     <div 
                       className="w-full"
                       style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
@@ -296,11 +370,107 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             />
 
           </div>
+
+          {/* DragOverlay - 拖拽时显示的图标副本 */}
+          <DragOverlay dropAnimation={null}>
+            {activeId ? (
+              <DragOverlayItem 
+                id={activeId}
+                gridItems={gridItems}
+                dockItems={dockItems}
+                iconStyle={currentIconStyle}
+              />
+            ) : null}
+          </DragOverlay>
         </DndContext>
       </main>
     </>
   );
 }
+
+// DragOverlay 中显示的图标组件
+const DragOverlayItem = ({ 
+  id, 
+  gridItems, 
+  dockItems, 
+  iconStyle 
+}: { 
+  id: string;
+  gridItems: any[];
+  dockItems: any[];
+  iconStyle: IconStyleSettings;
+}) => {
+  const item = [...gridItems, ...dockItems].find(i => i.id === id);
+  
+  if (!item) return null;
+
+  const iconSize = iconStyle?.size || 80;
+  const borderRadius = iconStyle?.borderRadius || 12;
+  const opacity = (iconStyle?.opacity || 100) / 100;
+
+  const iconStyle_css = {
+    width: `${iconSize}px`,
+    height: `${iconSize}px`,
+    borderRadius: `${borderRadius}px`,
+    opacity: opacity,
+  };
+
+  const renderIcon = () => {
+    if (item.iconType === 'text' && item.iconText && item.iconColor) {
+      return (
+        <div 
+          className="flex items-center justify-center text-white font-semibold overflow-hidden"
+          style={{
+            ...iconStyle_css,
+            backgroundColor: item.iconColor,
+            fontSize: `${iconSize / 4}px`,
+          }}
+        >
+          {item.iconText}
+        </div>
+      );
+    }
+
+    if (item.iconType === 'image' && item.iconImage) {
+      return (
+        <img 
+          src={item.iconImage}
+          alt={item.name}
+          className="object-cover"
+          style={iconStyle_css}
+        />
+      );
+    }
+
+    if (item.iconType === 'logo' && item.iconLogo) {
+      return (
+        <img 
+          src={item.iconLogo}
+          alt={item.name}
+          className="object-contain"
+          style={iconStyle_css}
+        />
+      );
+    }
+
+    return (
+      <div 
+        className="flex items-center justify-center bg-white/5"
+        style={iconStyle_css}
+      >
+        <svg width="24" height="24" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0.877075 7.49988C0.877075 3.84219 3.84222 0.877045 7.49991 0.877045C11.1576 0.877045 14.1227 3.84219 14.1227 7.49988C14.1227 11.1575 11.1576 14.1227 7.49991 14.1227C3.84222 14.1227 0.877075 11.1575 0.877075 7.49988ZM7.49991 1.82704C4.36689 1.82704 1.82708 4.36686 1.82708 7.49988C1.82708 10.6329 4.36689 13.1727 7.49991 13.1727C10.6329 13.1727 13.1727 10.6329 13.1727 7.49988C13.1727 4.36686 10.6329 1.82704 7.49991 1.82704Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
+        </svg>
+      </div>
+    );
+  };
+
+  return (
+    <div className="cursor-grabbing" style={{ opacity: 0.8 }}>
+      {renderIcon()}
+    </div>
+  );
+};
 
 // SSR - 服务端获取数据（与 UptimeFlare 对齐）
 export async function getServerSideProps() {
