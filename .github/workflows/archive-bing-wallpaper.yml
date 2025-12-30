@@ -1,0 +1,161 @@
+name: Archive Bing Wallpaper
+
+on:
+  schedule:
+    # 每天 UTC 18:00 运行（北京时间凌晨 2:00）
+    - cron: '0 18 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch Account ID
+        id: fetch_account_id
+        run: |
+          if [[ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]]; then
+            ACCOUNT_ID="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+            echo "Using provided CLOUDFLARE_ACCOUNT_ID from secrets."
+          else
+            ACCOUNT_ID=$(curl -X GET "https://api.cloudflare.com/client/v4/accounts" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type:application/json" | jq ".result[0].id" -r)
+            echo "Fetched CLOUDFLARE_ACCOUNT_ID: $ACCOUNT_ID"
+          fi
+          echo 'account_id='$ACCOUNT_ID >> $GITHUB_OUTPUT
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Get KV Namespace ID
+        id: get_kv_id
+        run: |
+          # 从 Terraform 输出获取 KV Namespace ID
+          cd deploy
+          terraform init
+          KV_ID=$(terraform output -raw kv_namespace_id 2>/dev/null || echo "")
+          
+          if [ -z "$KV_ID" ]; then
+            # 如果 Terraform 输出不可用，从 API 获取
+            KV_ID=$(curl -s -X GET \
+              "https://api.cloudflare.com/client/v4/accounts/${{ steps.fetch_account_id.outputs.account_id }}/storage/kv/namespaces" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | \
+              jq -r '.result[] | select(.title=="newtab_kv") | .id')
+          fi
+          
+          echo "KV Namespace ID: $KV_ID"
+          echo 'kv_id='$KV_ID >> $GITHUB_OUTPUT
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Fetch Bing Wallpapers
+        id: fetch
+        run: |
+          # 获取最近 16 天的壁纸
+          response=$(curl -s "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=16&mkt=zh-CN")
+          echo "$response" > bing_data.json
+
+      - name: Get Existing Archive List
+        id: existing
+        run: |
+          # 从 KV 读取现有存档列表
+          response=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/accounts/${{ steps.fetch_account_id.outputs.account_id }}/storage/kv/namespaces/${{ steps.get_kv_id.outputs.kv_id }}/values/bing_wallpaper_archive_list" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}")
+          
+          if [ $? -eq 0 ] && [ ! -z "$response" ] && [ "$response" != "null" ]; then
+            echo "$response" > existing_list.json
+          else
+            echo "[]" > existing_list.json
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Process and Archive Wallpapers
+        run: |
+          node << 'SCRIPT'
+          const fs = require('fs');
+          const bingData = JSON.parse(fs.readFileSync('bing_data.json', 'utf8'));
+          const existingList = JSON.parse(fs.readFileSync('existing_list.json', 'utf8'));
+          const existingDates = new Set(existingList);
+          
+          const newWallpapers = [];
+          const newDates = [];
+          
+          for (const image of bingData.images) {
+            const date = image.startdate;
+            
+            // 跳过已存档的
+            if (existingDates.has(date)) {
+              continue;
+            }
+            
+            const imageUrl = `https://www.bing.com${image.url}`;
+            const wallpaper = {
+              url: imageUrl,
+              thumbnail: imageUrl,
+              copyright: image.copyright,
+              copyrightlink: image.copyrightlink,
+              title: image.title,
+              date: date,
+              urlbase: image.urlbase,
+              archivedAt: new Date().toISOString()
+            };
+            
+            newWallpapers.push({ date, data: wallpaper });
+            newDates.push(date);
+          }
+          
+          console.log(`Found ${newWallpapers.length} new wallpapers to archive`);
+          
+          fs.writeFileSync('new_wallpapers.json', JSON.stringify(newWallpapers));
+          fs.writeFileSync('new_dates.json', JSON.stringify(newDates));
+          fs.writeFileSync('archive_count.txt', newWallpapers.length.toString());
+          SCRIPT
+
+      - name: Upload to KV
+        run: |
+          ARCHIVE_COUNT=$(cat archive_count.txt)
+          
+          if [ "$ARCHIVE_COUNT" -eq 0 ]; then
+            echo "ℹ️ No new wallpapers to archive"
+            exit 0
+          fi
+          
+          # 上传每个壁纸数据
+          cat new_wallpapers.json | jq -c '.[]' | while read wallpaper; do
+            date=$(echo $wallpaper | jq -r '.date')
+            data=$(echo $wallpaper | jq -c '.data')
+            
+            curl -X PUT \
+              "https://api.cloudflare.com/client/v4/accounts/${{ steps.fetch_account_id.outputs.account_id }}/storage/kv/namespaces/${{ steps.get_kv_id.outputs.kv_id }}/values/bing_wallpaper_${date}" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "$data"
+            
+            echo "✅ Archived wallpaper for date: $date"
+          done
+          
+          # 更新存档列表
+          existing_list=$(cat existing_list.json)
+          new_dates=$(cat new_dates.json)
+          
+          updated_list=$(node -e "
+            const existing = $existing_list;
+            const newDates = $new_dates;
+            const combined = [...newDates, ...existing];
+            console.log(JSON.stringify(combined));
+          ")
+          
+          curl -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${{ steps.fetch_account_id.outputs.account_id }}/storage/kv/namespaces/${{ steps.get_kv_id.outputs.kv_id }}/values/bing_wallpaper_archive_list" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "$updated_list"
+          
+          echo "✅ Successfully archived $ARCHIVE_COUNT wallpapers"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+

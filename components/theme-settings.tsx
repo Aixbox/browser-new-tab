@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
 import { setSetting } from "@/lib/settings-api";
 import { LockClosedIcon } from "@radix-ui/react-icons";
+import { BingWallpaperGallery } from "./bing-wallpaper-gallery";
 
 export const ThemeSettings = ({ 
   hasSecretKey, 
@@ -86,6 +87,12 @@ export const ThemeSettings = ({
     }
   };
 
+  const handleSelectWallpaper = (url: string, info: { copyright?: string; title?: string }) => {
+    setBackgroundUrl(url);
+    setMessage(`已选择：${info.copyright || info.title || '壁纸'}`);
+    setTimeout(() => setMessage(''), 3000);
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setMessage('');
@@ -149,13 +156,6 @@ export const ThemeSettings = ({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-white mb-2">主题设置</h3>
-        <p className="text-sm text-white/60">
-          自定义页面背景，支持图片和视频
-        </p>
-      </div>
-
       {/* 背景链接 */}
       <div className="space-y-2">
         <Label htmlFor="background-url" className="text-white font-medium">
@@ -194,6 +194,9 @@ export const ThemeSettings = ({
           {message}
         </div>
       )}
+
+      {/* 必应壁纸画廊 */}
+      <BingWallpaperGallery onSelect={handleSelectWallpaper} />
 
       {/* 说明 */}
       <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
