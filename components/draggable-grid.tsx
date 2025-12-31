@@ -309,13 +309,16 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
   );
 };
 
-export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, initialItems, onItemsChange }: { 
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, allPageItems, currentPageId, onItemsChange }: { 
   openInNewTab?: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
-  initialItems?: IconItem[];
-  onItemsChange?: (items: IconItem[]) => void;
+  allPageItems?: Record<string, IconItem[]>;
+  currentPageId?: string;
+  onItemsChange?: (allPageItems: Record<string, IconItem[]>) => void;
 }) => {
-  const [items, setItems] = useState<IconItem[]>(initialItems || []);
+  // 使用所有页面的数据，但只显示当前页面
+  const [pageItems, setPageItems] = useState<Record<string, IconItem[]>>(allPageItems || {});
+  const currentItems = pageItems[currentPageId || '1'] || [];
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState<IconItem | null>(null);
@@ -341,10 +344,10 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     id: 'grid-droppable',
   });
 
-  // 当 initialItems 变化时更新内部状态（页面切换时）
+  // 当 allPageItems 或 currentPageId 变化时更新内部状态
   useEffect(() => {
-    setItems(initialItems || []);
-  }, [initialItems]);
+    setPageItems(allPageItems || {});
+  }, [allPageItems, currentPageId]);
 
   // 监听设置变化
   useEffect(() => {
@@ -371,12 +374,13 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   ];
 
   const handleDelete = async (id: string) => {
-    const newItems = items.filter(item => item.id !== id);
-    setItems(newItems);
+    const newCurrentItems = currentItems.filter(item => item.id !== id);
+    const newPageItems = { ...pageItems, [currentPageId || '1']: newCurrentItems };
+    setPageItems(newPageItems);
     
     // 通知父组件
     if (onItemsChange) {
-      onItemsChange(newItems);
+      onItemsChange(newPageItems);
     }
   };
 
@@ -463,11 +467,12 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   const handleSave = async (continueAdding: boolean = false) => {
     if (!formData.url.trim() || !formData.name.trim()) return;
 
-    let newItems: IconItem[];
+    let newCurrentItems: IconItem[];
+    const pageId = currentPageId || '1';
 
     if (isEditMode && editingItem) {
       // 编辑模式：更新现有图标
-      newItems = items.map(item => 
+      newCurrentItems = currentItems.map(item => 
         item.id === editingItem.id
           ? {
               ...item,
@@ -493,14 +498,15 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
         iconText: formData.iconText || undefined,
         iconColor: formData.iconColor || undefined,
       };
-      newItems = [...items, newItem];
+      newCurrentItems = [...currentItems, newItem];
     }
 
-    setItems(newItems);
+    const newPageItems = { ...pageItems, [pageId]: newCurrentItems };
+    setPageItems(newPageItems);
 
     // 通知父组件
     if (onItemsChange) {
-      onItemsChange(newItems);
+      onItemsChange(newPageItems);
     }
 
     if (continueAdding && !isEditMode) {
@@ -605,7 +611,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   return (
     <>
       <div className="w-full" ref={setGridDroppableRef}>
-        <SortableContext items={items} strategy={rectSortingStrategy}>
+        <SortableContext items={currentItems} strategy={rectSortingStrategy}>
           <div 
             className={cn(
               "grid w-full transition-all duration-200",
@@ -616,7 +622,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
               gap: `${iconSpacing}px`
             }}
           >
-            {items.map((item) => (
+            {currentItems.map((item) => (
               <DraggableItem
                 key={item.id}
                 item={item}
