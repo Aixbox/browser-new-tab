@@ -126,16 +126,22 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
     isDragging,
   } = useSortable({ id: item.id });
 
+  // 调试：查看 isDragging 状态
+  useEffect(() => {
+    console.log(`Item ${item.id} isDragging:`, isDragging);
+  }, [isDragging, item.id]);
+
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0 : 1, // 拖拽时完全隐藏
-  };
+    transition: transform ? transition : 'none',
+    opacity: isDragging ? 0 : 1,
+    pointerEvents: isDragging ? 'none' : 'auto',
+  } as React.CSSProperties;
 
   const renderIcon = () => {
     const iconSize = iconStyle?.size || 80;
     const borderRadius = iconStyle?.borderRadius || 12;
-    const opacity = (iconStyle?.opacity || 100) / 100;
+    const opacity = isDragging ? 0 : (iconStyle?.opacity || 100) / 100;
 
     const iconStyle_css = {
       width: `${iconSize}px`,
@@ -250,14 +256,6 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
 
   return (
     <motion.div
-      layout
-      transition={{
-        layout: {
-          type: "spring",
-          stiffness: 350,
-          damping: 30
-        }
-      }}
       ref={setNodeRef}
       style={style}
       {...attributes}
@@ -269,7 +267,7 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
       <div style={{ width: `${iconSize}px`, height: `${iconSize}px` }}>
         {renderIcon()}
       </div>
-      {showName && (
+      {showName && !isDragging && (
         <span 
           className="font-medium leading-tight text-center block truncate"
           style={{

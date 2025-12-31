@@ -54,7 +54,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 3,
       },
     })
   );
@@ -773,7 +773,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
           </div>
 
           {/* DragOverlay - 拖拽时显示的图标副本 */}
-          <DragOverlay dropAnimation={null}>
+          <DragOverlay>
             {activeId ? (
               <DragOverlayItem 
                 id={activeId}
@@ -875,7 +875,7 @@ const DragOverlayItem = ({
   };
 
   return (
-    <div className="cursor-grabbing" style={{ opacity: 0.8 }}>
+    <div className="cursor-grabbing">
       {renderIcon()}
     </div>
   );
