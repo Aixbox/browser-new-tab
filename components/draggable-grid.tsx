@@ -12,7 +12,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GlobeIcon, PlusIcon, Cross2Icon } from "@radix-ui/react-icons";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, LayoutGroup } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -249,7 +249,15 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
   };
 
   return (
-    <div
+    <motion.div
+      layout
+      transition={{
+        layout: {
+          type: "spring",
+          stiffness: 350,
+          damping: 30
+        }
+      }}
       ref={setNodeRef}
       style={style}
       {...attributes}
@@ -275,14 +283,22 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
           {item.name}
         </span>
       )}
-    </div>
+    </motion.div>
   );
 };
 
 // 添加新图标的占位符
 const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => void; iconSize?: number; nameMaxWidth: number }) => {
   return (
-    <div
+    <motion.div
+      layout
+      transition={{
+        layout: {
+          type: "spring",
+          stiffness: 350,
+          damping: 30
+        }
+      }}
       className="relative cursor-pointer group"
       onClick={onClick}
     >
@@ -305,7 +321,7 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
       >
         添加
       </span>
-    </div>
+    </motion.div>
   );
 };
 
@@ -611,31 +627,33 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   return (
     <>
       <div className="w-full" ref={setGridDroppableRef}>
-        <SortableContext items={currentItems} strategy={rectSortingStrategy}>
-          <div 
-            className={cn(
-              "grid w-full transition-all duration-200",
-              isGridOver && "bg-white/5 rounded-lg"
-            )}
-            style={{
-              gridTemplateColumns: `repeat(auto-fill, ${gridMinSize}px)`,
-              gap: `${iconSpacing}px`
-            }}
-          >
-            {currentItems.map((item) => (
-              <DraggableItem
-                key={item.id}
-                item={item}
-                openInNewTab={openInNewTab}
-                iconStyle={iconStyle}
-                nameMaxWidth={nameMaxWidth}
-                onDelete={handleDelete}
-                onEdit={handleEdit}
-              />
-            ))}
-            <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} nameMaxWidth={nameMaxWidth} />
-          </div>
-        </SortableContext>
+        <LayoutGroup>
+          <SortableContext items={currentItems} strategy={rectSortingStrategy}>
+            <div 
+              className={cn(
+                "grid w-full transition-all duration-200",
+                isGridOver && "bg-white/5 rounded-lg"
+              )}
+              style={{
+                gridTemplateColumns: `repeat(auto-fill, ${gridMinSize}px)`,
+                gap: `${iconSpacing}px`
+              }}
+            >
+              {currentItems.map((item) => (
+                <DraggableItem
+                  key={item.id}
+                  item={item}
+                  openInNewTab={openInNewTab}
+                  iconStyle={iconStyle}
+                  nameMaxWidth={nameMaxWidth}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
+                />
+              ))}
+              <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} nameMaxWidth={nameMaxWidth} />
+            </div>
+          </SortableContext>
+        </LayoutGroup>
       </div>
 
       {/* 添加图标对话框 */}
