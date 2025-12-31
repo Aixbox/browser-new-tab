@@ -226,7 +226,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     
     const draggedFromDock = dockItems.find(item => item.id === active.id);
     
-    console.log('DragEnd - sourcePageId:', sourcePageId, 'currentPageId:', currentPageId, 'draggedFromGrid:', !!draggedFromGrid, 'draggedFromDock:', !!draggedFromDock, 'isOverInCurrentPage:', isOverInCurrentPage, 'overItemIndex:', overItemIndex);
+    console.log('DragEnd - sourcePageId:', sourcePageId, 'currentPageId:', currentPageId, 'draggedFromGrid:', !!draggedFromGrid, 'draggedFromDock:', !!draggedFromDock, 'isOverInCurrentPage:', isOverInCurrentPage, 'overItemIndex:', overItemIndex, 'over?.id:', over?.id);
 
     // 如果拖到了侧边栏按钮上，将图标移动到目标页面
     if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
@@ -330,9 +330,50 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       return;
     }
 
+    // 从 Dock 拖到 Dock 区域但没有放到其他 Dock 图标上（Dock 内部排序会在后面处理）
+    // 如果是从 Dock 拖出，但 over 是 dock-droppable 且不是拖到其他 Dock 图标上，说明是拖到 Dock 外面了
+    if (draggedFromDock && over?.id === 'dock-droppable') {
+      // 检查是否拖到了其他 Dock 图标上（用于排序）
+      const overDockItem = dockItems.find(item => item.id === over.id);
+      if (!overDockItem && over.id !== active.id) {
+        // 没有拖到其他 Dock 图标上，说明是拖到 Dock 容器的空白区域
+        // 这种情况下，图标应该移动到宫格
+        console.log('Dragged from dock to dock empty area, moving to grid');
+        
+        const currentGridItems = cleanPageGridItems[currentPageId] || [];
+        const newCurrentItems = [...currentGridItems, draggedFromDock];
+        const newPageGridItems = { ...cleanPageGridItems, [currentPageId]: newCurrentItems };
+        
+        setPageGridItems(newPageGridItems);
+        
+        // 从 Dock 移除
+        setDockItems(prevDockItems => {
+          const newDockItems = prevDockItems.filter(item => item.id !== active.id);
+          console.log('[Dock empty area] Removing from dock, count:', prevDockItems.length, '->', newDockItems.length);
+          return newDockItems;
+        });
+        
+        // 保存到 KV
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'page_grid_items',
+              value: JSON.stringify(newPageGridItems),
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to save page grid items:', error);
+        }
+        return;
+      }
+    }
+
     // 跨页面拖拽到宫格内部的具体位置（包括从 Dock）
     if ((draggedFromGrid && sourcePageId && sourcePageId !== currentPageId) || draggedFromDock) {
       console.log('Checking cross-page drag or dock drag...');
+      console.log('draggedFromDock:', !!draggedFromDock, 'over?.id:', over?.id, 'over?.id !== dock-droppable:', over?.id !== 'dock-droppable');
       
       // 获取清理后的当前页面图标
       const currentGridItems = cleanPageGridItems[currentPageId] || [];
@@ -361,8 +402,12 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         
         // 从 Dock 移除（如果是从 Dock 拖过来）
         if (draggedFromDock) {
-          const newDockItems = dockItems.filter(item => item.id !== active.id);
-          setDockItems(newDockItems);
+          console.log('[Specific position] Removing from dock, active.id:', active.id);
+          setDockItems(prevDockItems => {
+            const newDockItems = prevDockItems.filter(item => item.id !== active.id);
+            console.log('[Specific position] Dock items count:', prevDockItems.length, '->', newDockItems.length);
+            return newDockItems;
+          });
         }
         
         // 保存到 KV
@@ -381,29 +426,66 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         return;
       }
       
-      // 如果拖到了空白区域或 grid-droppable，添加到末尾
-      if (over?.id === 'grid-droppable' || !over?.id || over.id === active.id) {
-        console.log('Drag to end!');
+      // 如果从 Dock 拖出但不是拖回 Dock，将图标添加到当前页面
+      if (draggedFromDock && over?.id !== 'dock-droppable') {
+        console.log('Drag from dock to outside dock area, active.id:', active.id);
+        console.log('Current dockItems:', dockItems.map(i => i.id));
         
         let newPageGridItems = { ...cleanPageGridItems };
         
-        // 从源页面移除（如果是从宫格拖过来）
-        if (draggedFromGrid && sourcePageId) {
-          const sourceItems = cleanPageGridItems[sourcePageId].filter(item => item.id !== active.id);
-          newPageGridItems[sourcePageId] = sourceItems;
+        // 如果拖到了空白区域或 grid-droppable，添加到末尾
+        if (over?.id === 'grid-droppable' || !over?.id || over.id === active.id) {
+          console.log('Adding to current page end');
+          const newCurrentItems = [...currentGridItems, itemToMove];
+          newPageGridItems[currentPageId] = newCurrentItems;
+        } else {
+          // 拖到了其他位置（可能是页面边缘等），也添加到末尾
+          console.log('Adding to current page end (other position)');
+          const newCurrentItems = [...currentGridItems, itemToMove];
+          newPageGridItems[currentPageId] = newCurrentItems;
         }
+        
+        // 从 Dock 移除 - 使用函数式更新确保使用最新状态
+        setDockItems(prevDockItems => {
+          const newDockItems = prevDockItems.filter(item => item.id !== active.id);
+          console.log('Removing from dock, prev length:', prevDockItems.length, 'new length:', newDockItems.length);
+          console.log('New dockItems:', newDockItems.map(i => i.id));
+          return newDockItems;
+        });
+        
+        setPageGridItems(newPageGridItems);
+        
+        // 保存到 KV
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'page_grid_items',
+              value: JSON.stringify(newPageGridItems),
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to save page grid items:', error);
+        }
+        return;
+      }
+      
+      // 如果拖到了空白区域或 grid-droppable，添加到末尾（跨页面拖拽）
+      if (draggedFromGrid && sourcePageId && (over?.id === 'grid-droppable' || !over?.id || over.id === active.id)) {
+        console.log('Cross-page drag to end!');
+        
+        let newPageGridItems = { ...cleanPageGridItems };
+        
+        // 从源页面移除
+        const sourceItems = cleanPageGridItems[sourcePageId].filter(item => item.id !== active.id);
+        newPageGridItems[sourcePageId] = sourceItems;
         
         // 添加到末尾
         const newCurrentItems = [...currentGridItems, itemToMove];
         newPageGridItems[currentPageId] = newCurrentItems;
         
         setPageGridItems(newPageGridItems);
-        
-        // 从 Dock 移除（如果是从 Dock 拖过来）
-        if (draggedFromDock) {
-          const newDockItems = dockItems.filter(item => item.id !== active.id);
-          setDockItems(newDockItems);
-        }
         
         // 保存到 KV
         try {
