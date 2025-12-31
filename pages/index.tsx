@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Head from "next/head";
 import { KVNamespace } from '@cloudflare/workers-types';
-import { DndContext, closestCenter, pointerWithin, rectIntersection, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, CollisionDetection } from "@dnd-kit/core";
+import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core";
 import { Background } from "@/components/background";
 import { SidebarDemo } from "@/components/sidebar-demo";
 import { SearchEngine } from "@/components/search-engine";
@@ -10,7 +10,13 @@ import { DraggableGrid } from "@/components/draggable-grid";
 import { SettingsDialog } from "@/components/settings-drawer";
 import { Dock } from "@/components/dock";
 import { SidebarItem } from "@/components/custom-sidebar";
-import { GearIcon } from "@radix-ui/react-icons";
+import { DragOverlayItem } from "@/components/drag-overlay-item";
+import { ContextMenu } from "@/components/context-menu";
+import { useSettingsSync } from "@/hooks/use-settings-sync";
+import { useContextMenu } from "@/hooks/use-context-menu";
+import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
+import { createDragHandlers } from "@/lib/drag-handlers";
+import { createCustomCollisionDetection } from "@/lib/collision-detection";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
 
@@ -34,15 +40,12 @@ interface HomeProps {
 export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings, iconItems }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentLayoutMode, setCurrentLayoutMode] = useState<'component' | 'minimal'>(layoutMode);
-  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [currentIconStyle, setCurrentIconStyle] = useState<IconStyleSettings>(iconStyle);
   const [currentBackgroundUrl, setCurrentBackgroundUrl] = useState<string | null>(backgroundUrl);
   const [currentSidebarSettings, setCurrentSidebarSettings] = useState<SidebarSettings>(sidebarSettings);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [dockItems, setDockItems] = useState<any[]>([]);
-  // 多页面图标数据：{ pageId: items[] }
   const [pageGridItems, setPageGridItems] = useState<Record<string, any[]>>(() => {
-    // 初始化时，将 iconItems 放到第一个页面
     const firstPageId = sidebarItems?.[0]?.id || '1';
     return { [firstPageId]: iconItems || [] };
   });
@@ -53,123 +56,21 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 3,
-      },
+      activationConstraint: { distance: 3 },
     })
   );
 
-  // 自定义碰撞检测：侧边栏按钮使用严格的位置检查，其他使用 closestCenter
-  const customCollisionDetection: CollisionDetection = (args) => {
-    const { pointerCoordinates, droppableContainers } = args;
-    
-    // 如果有鼠标坐标，检查是否在侧边栏区域内
-    if (pointerCoordinates) {
-      const sidebarWidth = currentSidebarSettings.width || 64;
-      const isInSidebar = currentSidebarSettings.position === 'left' 
-        ? pointerCoordinates.x <= sidebarWidth 
-        : pointerCoordinates.x >= window.innerWidth - sidebarWidth;
-      
-      // 调试信息
-      console.log('Collision Detection - x:', pointerCoordinates.x, 'sidebarWidth:', sidebarWidth, 'isInSidebar:', isInSidebar);
-      
-      // 只有在侧边栏区域内才检测侧边栏按钮
-      if (isInSidebar) {
-        const pointerCollisions = pointerWithin(args);
-        const sidebarButtonCollision = pointerCollisions.find(
-          collision => typeof collision.id === 'string' && collision.id.startsWith('sidebar-button-')
-        );
-        
-        if (sidebarButtonCollision) {
-          console.log('Found sidebar button collision:', sidebarButtonCollision.id);
-          return [sidebarButtonCollision];
-        }
-      } else {
-        // 不在侧边栏区域内，过滤掉所有侧边栏按钮
-        const filteredArgs = {
-          ...args,
-          droppableContainers: Array.from(droppableContainers).filter(
-            container => !(typeof container.id === 'string' && container.id.startsWith('sidebar-button-'))
-          )
-        };
-        return closestCenter(filteredArgs);
-      }
-    }
-    
-    // 否则使用 closestCenter 检测其他区域
-    return closestCenter(args);
-  };
+  const customCollisionDetection = createCustomCollisionDetection(currentSidebarSettings);
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
+  const dragHandlers = createDragHandlers(
+    { pageGridItems, currentPageId, dockItems },
+    { setActiveId, setDragOverPageId, setCurrentPageId, setPageGridItems, setDockItems },
+    switchTimeoutRef
+  );
 
-  const handleDragOver = (event: any) => {
-    const { over, active } = event;
-    
-    // 调试：查看 over.id 的值
-    if (over?.id) {
-      console.log('DragOver - over.id:', over.id);
-    }
-    
-    // 清除之前的定时器
-    if (switchTimeoutRef.current) {
-      clearTimeout(switchTimeoutRef.current);
-      switchTimeoutRef.current = null;
-    }
-    
-    // 只有当悬浮在侧边栏按钮上时才切换页面
-    if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
-      const pageId = over.id.replace('sidebar-button-', '');
-      
-      console.log('Hovering over sidebar button, pageId:', pageId, 'currentPageId:', currentPageId);
-      
-      // 只有当目标页面不同时才切换
-      if (pageId !== currentPageId) {
-        setDragOverPageId(pageId);
-        
-        // 短暂延迟，避免拖拽状态丢失，但不影响用户体验
-        switchTimeoutRef.current = setTimeout(() => {
-          console.log('Switching to page:', pageId);
-          setCurrentPageId(pageId);
-          setDragOverPageId(null);
-        }, 150);
-      }
-    } else {
-      // 离开侧边栏按钮区域
-      setDragOverPageId(null);
-    }
-    
-    // 处理跨页面拖拽：如果拖拽的图标不在当前页面，临时添加以显示预览
-    if (active && over?.id && !over.id.toString().startsWith('sidebar-button-') && over.id !== 'dock-droppable') {
-      const currentItems = pageGridItems[currentPageId] || [];
-      const isInCurrentPage = currentItems.some(item => item.id === active.id);
-      
-      if (!isInCurrentPage) {
-        // 查找被拖拽的图标
-        let draggedItem: any = null;
-        for (const items of Object.values(pageGridItems)) {
-          const found = items.find(item => item.id === active.id);
-          if (found) {
-            draggedItem = found;
-            break;
-          }
-        }
-        if (!draggedItem) {
-          draggedItem = dockItems.find(item => item.id === active.id);
-        }
-        
-        // 临时添加到当前页面以显示预览
-        if (draggedItem) {
-          const newPageGridItems = {
-            ...pageGridItems,
-            [currentPageId]: [...currentItems, { ...draggedItem, _tempPreview: true }]
-          };
-          setPageGridItems(newPageGridItems);
-        }
-      }
-    }
-  };
+  useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
+  useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
+  const { contextMenuPosition, handleContextMenu, closeContextMenu } = useContextMenu();
 
   // 清理定时器
   useEffect(() => {
@@ -179,459 +80,6 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       }
     };
   }, []);
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    console.log('DragEnd - active.id:', active.id, 'over?.id:', over?.id);
-    
-    setActiveId(null);
-
-    // 在清理临时预览之前，先记录 over 的位置信息
-    let overItemIndex = -1;
-    let isOverInCurrentPage = false;
-    if (over?.id && over.id !== active.id) {
-      const currentItems = pageGridItems[currentPageId] || [];
-      overItemIndex = currentItems.findIndex(item => item.id === over.id && !item._tempPreview);
-      isOverInCurrentPage = overItemIndex !== -1;
-    }
-
-    // 清理所有临时预览图标
-    const cleanPageGridItems = Object.fromEntries(
-      Object.entries(pageGridItems).map(([pageId, items]) => [
-        pageId,
-        items.filter(item => !item._tempPreview)
-      ])
-    );
-
-    // 确定目标页面：如果拖到侧边栏按钮上，使用按钮对应的页面
-    let targetPageId = currentPageId;
-    if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
-      targetPageId = over.id.replace('sidebar-button-', '');
-    }
-
-    // 查找被拖拽的图标（可能在任何页面或 Dock 中，排除临时预览）
-    let draggedFromGrid: any = null;
-    let sourcePageId: string | null = null;
-    
-    // 在所有页面中查找
-    for (const [pageId, items] of Object.entries(cleanPageGridItems)) {
-      const found = items.find(item => item.id === active.id);
-      if (found) {
-        draggedFromGrid = found;
-        sourcePageId = pageId;
-        break;
-      }
-    }
-    
-    const draggedFromDock = dockItems.find(item => item.id === active.id);
-    
-    console.log('DragEnd - sourcePageId:', sourcePageId, 'currentPageId:', currentPageId, 'draggedFromGrid:', !!draggedFromGrid, 'draggedFromDock:', !!draggedFromDock, 'isOverInCurrentPage:', isOverInCurrentPage, 'overItemIndex:', overItemIndex, 'over?.id:', over?.id);
-
-    // 如果拖到了侧边栏按钮上，将图标移动到目标页面
-    if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
-      if (draggedFromGrid && sourcePageId) {
-        // 从源页面移除
-        const sourceItems = cleanPageGridItems[sourcePageId].filter(item => item.id !== active.id);
-        // 添加到目标页面
-        const targetItems = [...(cleanPageGridItems[targetPageId] || []), draggedFromGrid];
-        
-        const newPageGridItems = {
-          ...cleanPageGridItems,
-          [sourcePageId]: sourceItems,
-          [targetPageId]: targetItems,
-        };
-        
-        setPageGridItems(newPageGridItems);
-        setCurrentPageId(targetPageId);
-        setDragOverPageId(null);
-        
-        // 保存到 KV
-        try {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              key: 'page_grid_items',
-              value: JSON.stringify(newPageGridItems),
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save page grid items:', error);
-        }
-      } else if (draggedFromDock) {
-        // 从 Dock 拖到侧边栏按钮（添加到目标页面）
-        const targetItems = [...(cleanPageGridItems[targetPageId] || []), draggedFromDock];
-        const newDockItems = dockItems.filter(item => item.id !== active.id);
-        
-        const newPageGridItems = {
-          ...cleanPageGridItems,
-          [targetPageId]: targetItems,
-        };
-        
-        setPageGridItems(newPageGridItems);
-        setDockItems(newDockItems);
-        setCurrentPageId(targetPageId);
-        setDragOverPageId(null);
-        
-        // 保存到 KV
-        try {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              key: 'page_grid_items',
-              value: JSON.stringify(newPageGridItems),
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save page grid items:', error);
-        }
-      }
-      return;
-    }
-
-    setDragOverPageId(null);
-
-    // 获取当前页面的图标数据（已清理临时预览）
-    const currentGridItems = cleanPageGridItems[currentPageId] || [];
-    const currentDraggedFromGrid = currentGridItems.find(item => item.id === active.id);
-
-    // 从宫格拖到 Dock
-    if (over?.id === 'dock-droppable' && (currentDraggedFromGrid || draggedFromGrid)) {
-      const itemToMove = currentDraggedFromGrid || draggedFromGrid;
-      if (itemToMove && !dockItems.find(dockItem => dockItem.id === itemToMove.id)) {
-        // 添加到 Dock
-        const newDockItems = [...dockItems, itemToMove];
-        setDockItems(newDockItems);
-        
-        // 从源页面的宫格移除
-        const fromPageId = currentDraggedFromGrid ? currentPageId : sourcePageId;
-        if (fromPageId) {
-          const newGridItems = cleanPageGridItems[fromPageId].filter(item => item.id !== active.id);
-          const newPageGridItems = { ...cleanPageGridItems, [fromPageId]: newGridItems };
-          setPageGridItems(newPageGridItems);
-          
-          // 保存到 KV
-          try {
-            await fetch('/api/settings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                key: 'page_grid_items',
-                value: JSON.stringify(newPageGridItems),
-              }),
-            });
-          } catch (error) {
-            console.error('Failed to save page grid items:', error);
-          }
-        }
-      }
-      return;
-    }
-
-    // 从 Dock 拖到 Dock 区域但没有放到其他 Dock 图标上（Dock 内部排序会在后面处理）
-    // 如果是从 Dock 拖出，但 over 是 dock-droppable 且不是拖到其他 Dock 图标上，说明是拖到 Dock 外面了
-    if (draggedFromDock && over?.id === 'dock-droppable') {
-      // 检查是否拖到了其他 Dock 图标上（用于排序）
-      const overDockItem = dockItems.find(item => item.id === over.id);
-      if (!overDockItem && over.id !== active.id) {
-        // 没有拖到其他 Dock 图标上，说明是拖到 Dock 容器的空白区域
-        // 这种情况下，图标应该移动到宫格
-        console.log('Dragged from dock to dock empty area, moving to grid');
-        
-        const currentGridItems = cleanPageGridItems[currentPageId] || [];
-        const newCurrentItems = [...currentGridItems, draggedFromDock];
-        const newPageGridItems = { ...cleanPageGridItems, [currentPageId]: newCurrentItems };
-        
-        setPageGridItems(newPageGridItems);
-        
-        // 从 Dock 移除
-        setDockItems(prevDockItems => {
-          const newDockItems = prevDockItems.filter(item => item.id !== active.id);
-          console.log('[Dock empty area] Removing from dock, count:', prevDockItems.length, '->', newDockItems.length);
-          return newDockItems;
-        });
-        
-        // 保存到 KV
-        try {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              key: 'page_grid_items',
-              value: JSON.stringify(newPageGridItems),
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save page grid items:', error);
-        }
-        return;
-      }
-    }
-
-    // 跨页面拖拽到宫格内部的具体位置（包括从 Dock）
-    if ((draggedFromGrid && sourcePageId && sourcePageId !== currentPageId) || draggedFromDock) {
-      console.log('Checking cross-page drag or dock drag...');
-      console.log('draggedFromDock:', !!draggedFromDock, 'over?.id:', over?.id, 'over?.id !== dock-droppable:', over?.id !== 'dock-droppable');
-      
-      // 获取清理后的当前页面图标
-      const currentGridItems = cleanPageGridItems[currentPageId] || [];
-      const itemToMove = draggedFromGrid || draggedFromDock;
-      
-      if (!itemToMove) return;
-      
-      // 如果拖到了当前页面的某个图标位置
-      if (isOverInCurrentPage && overItemIndex !== -1) {
-        console.log('Drag to specific position! at index', overItemIndex);
-        
-        let newPageGridItems = { ...cleanPageGridItems };
-        
-        // 从源页面移除（如果是从宫格拖过来）
-        if (draggedFromGrid && sourcePageId) {
-          const sourceItems = cleanPageGridItems[sourcePageId].filter(item => item.id !== active.id);
-          newPageGridItems[sourcePageId] = sourceItems;
-        }
-        
-        // 插入到目标位置
-        const newCurrentItems = [...currentGridItems];
-        newCurrentItems.splice(overItemIndex, 0, itemToMove);
-        newPageGridItems[currentPageId] = newCurrentItems;
-        
-        setPageGridItems(newPageGridItems);
-        
-        // 从 Dock 移除（如果是从 Dock 拖过来）
-        if (draggedFromDock) {
-          console.log('[Specific position] Removing from dock, active.id:', active.id);
-          setDockItems(prevDockItems => {
-            const newDockItems = prevDockItems.filter(item => item.id !== active.id);
-            console.log('[Specific position] Dock items count:', prevDockItems.length, '->', newDockItems.length);
-            return newDockItems;
-          });
-        }
-        
-        // 保存到 KV
-        try {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              key: 'page_grid_items',
-              value: JSON.stringify(newPageGridItems),
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save page grid items:', error);
-        }
-        return;
-      }
-      
-      // 如果从 Dock 拖出但不是拖回 Dock，将图标添加到当前页面
-      if (draggedFromDock && over?.id !== 'dock-droppable') {
-        console.log('Drag from dock to outside dock area, active.id:', active.id);
-        console.log('Current dockItems:', dockItems.map(i => i.id));
-        
-        let newPageGridItems = { ...cleanPageGridItems };
-        
-        // 如果拖到了空白区域或 grid-droppable，添加到末尾
-        if (over?.id === 'grid-droppable' || !over?.id || over.id === active.id) {
-          console.log('Adding to current page end');
-          const newCurrentItems = [...currentGridItems, itemToMove];
-          newPageGridItems[currentPageId] = newCurrentItems;
-        } else {
-          // 拖到了其他位置（可能是页面边缘等），也添加到末尾
-          console.log('Adding to current page end (other position)');
-          const newCurrentItems = [...currentGridItems, itemToMove];
-          newPageGridItems[currentPageId] = newCurrentItems;
-        }
-        
-        // 从 Dock 移除 - 使用函数式更新确保使用最新状态
-        setDockItems(prevDockItems => {
-          const newDockItems = prevDockItems.filter(item => item.id !== active.id);
-          console.log('Removing from dock, prev length:', prevDockItems.length, 'new length:', newDockItems.length);
-          console.log('New dockItems:', newDockItems.map(i => i.id));
-          return newDockItems;
-        });
-        
-        setPageGridItems(newPageGridItems);
-        
-        // 保存到 KV
-        try {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              key: 'page_grid_items',
-              value: JSON.stringify(newPageGridItems),
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save page grid items:', error);
-        }
-        return;
-      }
-      
-      // 如果拖到了空白区域或 grid-droppable，添加到末尾（跨页面拖拽）
-      if (draggedFromGrid && sourcePageId && (over?.id === 'grid-droppable' || !over?.id || over.id === active.id)) {
-        console.log('Cross-page drag to end!');
-        
-        let newPageGridItems = { ...cleanPageGridItems };
-        
-        // 从源页面移除
-        const sourceItems = cleanPageGridItems[sourcePageId].filter(item => item.id !== active.id);
-        newPageGridItems[sourcePageId] = sourceItems;
-        
-        // 添加到末尾
-        const newCurrentItems = [...currentGridItems, itemToMove];
-        newPageGridItems[currentPageId] = newCurrentItems;
-        
-        setPageGridItems(newPageGridItems);
-        
-        // 保存到 KV
-        try {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              key: 'page_grid_items',
-              value: JSON.stringify(newPageGridItems),
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save page grid items:', error);
-        }
-        return;
-      }
-    }
-
-    // Grid 内部排序（同一页面内）
-    if (currentDraggedFromGrid && active.id !== over?.id && over?.id) {
-      const oldIndex = currentGridItems.findIndex((item) => item.id === active.id);
-      const newIndex = currentGridItems.findIndex((item) => item.id === over.id);
-      
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newItems = [...currentGridItems];
-        const [movedItem] = newItems.splice(oldIndex, 1);
-        newItems.splice(newIndex, 0, movedItem);
-        const newPageGridItems = { ...pageGridItems, [currentPageId]: newItems };
-        setPageGridItems(newPageGridItems);
-        
-        // 保存到 KV
-        try {
-          await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              key: 'page_grid_items',
-              value: JSON.stringify(newPageGridItems),
-            }),
-          });
-        } catch (error) {
-          console.error('Failed to save page grid items:', error);
-        }
-      }
-    }
-
-    // Dock 内部排序
-    if (draggedFromDock && active.id !== over?.id && over?.id) {
-      const oldIndex = dockItems.findIndex((item) => item.id === active.id);
-      const newIndex = dockItems.findIndex((item) => item.id === over.id);
-      
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newItems = [...dockItems];
-        const [movedItem] = newItems.splice(oldIndex, 1);
-        newItems.splice(newIndex, 0, movedItem);
-        setDockItems(newItems);
-        
-        // 保存到 KV（这里需要保存 Dock 数据）
-        // TODO: 添加保存 Dock 数据的逻辑
-      }
-    }
-  };
-
-  // 监听布局模式变化
-  useEffect(() => {
-    const handleLayoutModeChange = (e: CustomEvent) => {
-      if (e.detail?.mode) {
-        setCurrentLayoutMode(e.detail.mode);
-      }
-    };
-    
-    window.addEventListener('layoutModeChanged', handleLayoutModeChange as EventListener);
-    return () => window.removeEventListener('layoutModeChanged', handleLayoutModeChange as EventListener);
-  }, []);
-
-  // 监听图标样式变化
-  useEffect(() => {
-    const handleIconStyleChange = (e: CustomEvent) => {
-      if (e.detail) {
-        setCurrentIconStyle(e.detail);
-      }
-    };
-    
-    window.addEventListener('iconStyleChanged', handleIconStyleChange as EventListener);
-    return () => window.removeEventListener('iconStyleChanged', handleIconStyleChange as EventListener);
-  }, []);
-
-  // 监听背景变化
-  useEffect(() => {
-    const handleBackgroundChange = (e: CustomEvent) => {
-      if (e.detail?.url !== undefined) {
-        setCurrentBackgroundUrl(e.detail.url);
-      }
-    };
-    
-    window.addEventListener('backgroundChanged', handleBackgroundChange as EventListener);
-    return () => window.removeEventListener('backgroundChanged', handleBackgroundChange as EventListener);
-  }, []);
-
-  // 监听侧边栏设置变化
-  useEffect(() => {
-    const handleSidebarSettingsChange = (e: CustomEvent) => {
-      if (e.detail) {
-        setCurrentSidebarSettings(e.detail);
-      }
-    };
-    
-    window.addEventListener('sidebarSettingsChanged', handleSidebarSettingsChange as EventListener);
-    return () => window.removeEventListener('sidebarSettingsChanged', handleSidebarSettingsChange as EventListener);
-  }, []);
-
-  // 自动隐藏侧边栏逻辑
-  useEffect(() => {
-    if (!currentSidebarSettings.autoHide) {
-      setIsSidebarVisible(true);
-      return;
-    }
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const threshold = 50; // 触发区域宽度
-      const isLeft = currentSidebarSettings.position === 'left';
-      const isNearEdge = isLeft 
-        ? e.clientX < threshold 
-        : e.clientX > window.innerWidth - threshold;
-      
-      setIsSidebarVisible(isNearEdge);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [currentSidebarSettings.autoHide, currentSidebarSettings.position]);
-
-  // 处理右键菜单
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setContextMenuPosition({ x: e.clientX, y: e.clientY });
-  };
-
-  // 点击其他地方关闭菜单
-  useEffect(() => {
-    const handleClick = () => setContextMenuPosition(null);
-    if (contextMenuPosition) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [contextMenuPosition]);
 
   return (
     <>
@@ -644,9 +92,9 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         <DndContext
           sensors={sensors}
           collisionDetection={customCollisionDetection}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
+          onDragStart={dragHandlers.onDragStart}
+          onDragOver={dragHandlers.onDragOver}
+          onDragEnd={dragHandlers.onDragEnd}
         >
           <div className="relative h-full w-full">
             <Background 
@@ -736,25 +184,13 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
 
             {/* 右键菜单 */}
             {contextMenuPosition && (
-              <div
-                className="fixed bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-lg shadow-xl z-[100] py-1 min-w-[160px]"
-                style={{
-                  left: `${contextMenuPosition.x}px`,
-                  top: `${contextMenuPosition.y}px`,
+              <ContextMenu
+                position={contextMenuPosition}
+                onSettingsClick={() => {
+                  setIsSettingsOpen(true);
+                  closeContextMenu();
                 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={() => {
-                    setIsSettingsOpen(true);
-                    setContextMenuPosition(null);
-                  }}
-                  className="w-full px-4 py-2 text-left text-white hover:bg-white/10 transition-colors flex items-center gap-3"
-                >
-                  <GearIcon className="w-4 h-4" />
-                  <span>设置</span>
-                </button>
-              </div>
+              />
             )}
             
             {/* 设置对话框 */}
@@ -789,97 +225,6 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     </>
   );
 }
-
-// DragOverlay 中显示的图标组件
-const DragOverlayItem = ({ 
-  id, 
-  pageGridItems,
-  currentPageId,
-  dockItems, 
-  iconStyle 
-}: { 
-  id: string;
-  pageGridItems: Record<string, any[]>;
-  currentPageId: string;
-  dockItems: any[];
-  iconStyle: IconStyleSettings;
-}) => {
-  // 从所有页面和 Dock 中查找图标
-  const allItems = [
-    ...Object.values(pageGridItems).flat(),
-    ...dockItems
-  ];
-  const item = allItems.find(i => i.id === id);
-  
-  if (!item) return null;
-
-  const iconSize = iconStyle?.size || 80;
-  const borderRadius = iconStyle?.borderRadius || 12;
-  const opacity = (iconStyle?.opacity || 100) / 100;
-
-  const iconStyle_css = {
-    width: `${iconSize}px`,
-    height: `${iconSize}px`,
-    borderRadius: `${borderRadius}px`,
-    opacity: opacity,
-  };
-
-  const renderIcon = () => {
-    if (item.iconType === 'text' && item.iconText && item.iconColor) {
-      return (
-        <div 
-          className="flex items-center justify-center text-white font-semibold overflow-hidden"
-          style={{
-            ...iconStyle_css,
-            backgroundColor: item.iconColor,
-            fontSize: `${iconSize / 4}px`,
-          }}
-        >
-          {item.iconText}
-        </div>
-      );
-    }
-
-    if (item.iconType === 'image' && item.iconImage) {
-      return (
-        <img 
-          src={item.iconImage}
-          alt={item.name}
-          className="object-cover"
-          style={iconStyle_css}
-        />
-      );
-    }
-
-    if (item.iconType === 'logo' && item.iconLogo) {
-      return (
-        <img 
-          src={item.iconLogo}
-          alt={item.name}
-          className="object-contain"
-          style={iconStyle_css}
-        />
-      );
-    }
-
-    return (
-      <div 
-        className="flex items-center justify-center bg-white/5"
-        style={iconStyle_css}
-      >
-        <svg width="24" height="24" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0.877075 7.49988C0.877075 3.84219 3.84222 0.877045 7.49991 0.877045C11.1576 0.877045 14.1227 3.84219 14.1227 7.49988C14.1227 11.1575 11.1576 14.1227 7.49991 14.1227C3.84222 14.1227 0.877075 11.1575 0.877075 7.49988ZM7.49991 1.82704C4.36689 1.82704 1.82708 4.36686 1.82708 7.49988C1.82708 10.6329 4.36689 13.1727 7.49991 13.1727C10.6329 13.1727 13.1727 10.6329 13.1727 7.49988C13.1727 4.36686 10.6329 1.82704 7.49991 1.82704Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
-        </svg>
-      </div>
-    );
-  };
-
-  return (
-    <div className="cursor-grabbing">
-      {renderIcon()}
-    </div>
-  );
-};
 
 // SSR - 服务端获取数据（与 UptimeFlare 对齐）
 export async function getServerSideProps() {
