@@ -12,6 +12,7 @@ interface SidebarDemoProps {
   wheelScroll?: boolean;
   width?: number;
   onPageChange?: (pageId: string) => void;
+  currentPageId?: string;
 }
 
 const defaultItems: SidebarItem[] = [
@@ -32,7 +33,7 @@ const defaultItems: SidebarItem[] = [
   },
 ];
 
-export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems, wheelScroll = false, width = 64, onPageChange }: SidebarDemoProps) => {
+export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems, wheelScroll = false, width = 64, onPageChange, currentPageId }: SidebarDemoProps) => {
   const [items, setItems] = useState<SidebarItem[]>(initialSidebarItems || defaultItems);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -80,6 +81,7 @@ export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems, whe
       wheelScroll={wheelScroll}
       width={width}
       onPageChange={onPageChange}
+      currentPageId={currentPageId}
     />
   );
 };

@@ -23,6 +23,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "./ui/context-menu";
+import { useDroppable } from "@dnd-kit/core";
 
 // 可用的图标选项
 const availableIcons = {
@@ -34,6 +35,78 @@ const availableIcons = {
   calendar: CalendarIcon,
   document: FileTextIcon,
   heart: HeartIcon,
+};
+
+// 侧边栏按钮组件 - 支持拖拽悬浮
+const SidebarButton = ({ 
+  item, 
+  index, 
+  isSelected, 
+  IconComponent, 
+  onItemClick, 
+  onEditItem, 
+  onRemoveItem,
+  canDelete 
+}: {
+  item: SidebarItem;
+  index: number;
+  isSelected: boolean;
+  IconComponent: React.ComponentType<{ className?: string }>;
+  onItemClick: (item: SidebarItem) => void;
+  onEditItem: (item: SidebarItem) => void;
+  onRemoveItem: (id: string) => void;
+  canDelete: boolean;
+}) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `sidebar-button-${item.id}`,
+  });
+
+  return (
+    <motion.div
+      key={item.id}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ delay: index * 0.1 }}
+    >
+      <ContextMenu>
+        <ContextMenuTrigger>
+          <div
+            ref={setNodeRef}
+            className={cn(
+              "w-full h-[52px] flex flex-col gap-0.5 py-1 cursor-pointer group",
+              "transition-colors duration-300 ease-out items-center justify-center",
+              isSelected && "bg-primary/30",
+              isOver && "bg-primary/40 ring-2 ring-white/50"
+            )}
+            onClick={() => onItemClick(item)}
+          >
+            <IconComponent className="w-5 h-5 transition-transform duration-200 ease-out group-hover:scale-110" />
+            <span className="text-[11px] font-medium truncate max-w-full leading-tight">
+              {item.title}
+            </span>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => onEditItem(item)}>
+            <Pencil1Icon className="w-4 h-4 mr-2" />
+            编辑
+          </ContextMenuItem>
+          <ContextMenuItem 
+            onClick={() => onRemoveItem(item.id)}
+            className={cn(
+              "text-destructive focus:text-destructive",
+              !canDelete && "opacity-50 cursor-not-allowed"
+            )}
+            disabled={!canDelete}
+          >
+            <TrashIcon className="w-4 h-4 mr-2" />
+            删除
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </motion.div>
+  );
 };
 
 export interface SidebarItem {
@@ -52,6 +125,7 @@ interface CustomSidebarProps {
   wheelScroll?: boolean;
   width?: number;
   onPageChange?: (pageId: string) => void;
+  currentPageId?: string;
 }
 
 const defaultItems: SidebarItem[] = [
@@ -68,7 +142,8 @@ export const CustomSidebar = ({
   className,
   wheelScroll = false,
   width = 64,
-  onPageChange
+  onPageChange,
+  currentPageId
 }: CustomSidebarProps) => {
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>(items);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -261,50 +336,19 @@ export const CustomSidebar = ({
         <AnimatePresence>
           {sidebarItems.map((item, index) => {
             const IconComponent = availableIcons[item.icon];
-            const isSelected = selectedItemId === item.id;
+            const isSelected = (currentPageId || selectedItemId) === item.id;
             return (
-              <motion.div
+              <SidebarButton
                 key={item.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <ContextMenu>
-                  <ContextMenuTrigger>
-                    <div
-                      className={cn(
-                        "w-full h-[52px] flex flex-col gap-0.5 py-1 cursor-pointer group",
-                        "transition-colors duration-300 ease-out items-center justify-center",
-                        isSelected && "bg-primary/30"
-                      )}
-                      onClick={() => handleItemClick(item)}
-                    >
-                      <IconComponent className="w-5 h-5 transition-transform duration-200 ease-out group-hover:scale-110" />
-                      <span className="text-[11px] font-medium truncate max-w-full leading-tight">
-                        {item.title}
-                      </span>
-                    </div>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem onClick={() => handleEditItem(item)}>
-                      <Pencil1Icon className="w-4 h-4 mr-2" />
-                      编辑
-                    </ContextMenuItem>
-                    <ContextMenuItem 
-                      onClick={() => handleRemoveItem(item.id)}
-                      className={cn(
-                        "text-destructive focus:text-destructive",
-                        sidebarItems.length <= 1 && "opacity-50 cursor-not-allowed"
-                      )}
-                      disabled={sidebarItems.length <= 1}
-                    >
-                      <TrashIcon className="w-4 h-4 mr-2" />
-                      删除
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              </motion.div>
+                item={item}
+                index={index}
+                isSelected={isSelected}
+                IconComponent={IconComponent}
+                onItemClick={handleItemClick}
+                onEditItem={handleEditItem}
+                onRemoveItem={handleRemoveItem}
+                canDelete={sidebarItems.length > 1}
+              />
             );
           })}
         </AnimatePresence>

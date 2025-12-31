@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Head from "next/head";
 import { KVNamespace } from '@cloudflare/workers-types';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, pointerWithin, rectIntersection, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, CollisionDetection } from "@dnd-kit/core";
 import { Background } from "@/components/background";
 import { SidebarDemo } from "@/components/sidebar-demo";
 import { SearchEngine } from "@/components/search-engine";
@@ -40,8 +40,16 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   const [currentSidebarSettings, setCurrentSidebarSettings] = useState<SidebarSettings>(sidebarSettings);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [dockItems, setDockItems] = useState<any[]>([]);
-  const [gridItems, setGridItems] = useState<any[]>(iconItems || []);
+  // 多页面图标数据：{ pageId: items[] }
+  const [pageGridItems, setPageGridItems] = useState<Record<string, any[]>>(() => {
+    // 初始化时，将 iconItems 放到第一个页面
+    const firstPageId = sidebarItems?.[0]?.id || '1';
+    return { [firstPageId]: iconItems || [] };
+  });
+  const [currentPageId, setCurrentPageId] = useState<string>(sidebarItems?.[0]?.id || '1');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragOverPageId, setDragOverPageId] = useState<string | null>(null);
+  const switchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -51,28 +59,141 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     })
   );
 
+  // 自定义碰撞检测：侧边栏按钮使用严格的位置检查，其他使用 closestCenter
+  const customCollisionDetection: CollisionDetection = (args) => {
+    const { pointerCoordinates, droppableContainers } = args;
+    
+    // 如果有鼠标坐标，检查是否在侧边栏区域内
+    if (pointerCoordinates) {
+      const sidebarWidth = currentSidebarSettings.width || 64;
+      const isInSidebar = currentSidebarSettings.position === 'left' 
+        ? pointerCoordinates.x <= sidebarWidth 
+        : pointerCoordinates.x >= window.innerWidth - sidebarWidth;
+      
+      // 调试信息
+      console.log('Collision Detection - x:', pointerCoordinates.x, 'sidebarWidth:', sidebarWidth, 'isInSidebar:', isInSidebar);
+      
+      // 只有在侧边栏区域内才检测侧边栏按钮
+      if (isInSidebar) {
+        const pointerCollisions = pointerWithin(args);
+        const sidebarButtonCollision = pointerCollisions.find(
+          collision => typeof collision.id === 'string' && collision.id.startsWith('sidebar-button-')
+        );
+        
+        if (sidebarButtonCollision) {
+          console.log('Found sidebar button collision:', sidebarButtonCollision.id);
+          return [sidebarButtonCollision];
+        }
+      } else {
+        // 不在侧边栏区域内，过滤掉所有侧边栏按钮
+        const filteredArgs = {
+          ...args,
+          droppableContainers: Array.from(droppableContainers).filter(
+            container => !(typeof container.id === 'string' && container.id.startsWith('sidebar-button-'))
+          )
+        };
+        return closestCenter(filteredArgs);
+      }
+    }
+    
+    // 否则使用 closestCenter 检测其他区域
+    return closestCenter(args);
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
+
+  const handleDragOver = (event: any) => {
+    const { over } = event;
+    
+    // 调试：查看 over.id 的值
+    if (over?.id) {
+      console.log('DragOver - over.id:', over.id);
+    }
+    
+    // 清除之前的定时器
+    if (switchTimeoutRef.current) {
+      clearTimeout(switchTimeoutRef.current);
+      switchTimeoutRef.current = null;
+    }
+    
+    // 只有当悬浮在侧边栏按钮上时才切换页面
+    if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
+      const pageId = over.id.replace('sidebar-button-', '');
+      
+      console.log('Hovering over sidebar button, pageId:', pageId, 'currentPageId:', currentPageId);
+      
+      // 只有当目标页面不同时才切换
+      if (pageId !== currentPageId) {
+        setDragOverPageId(pageId);
+        
+        // 短暂延迟，避免拖拽状态丢失，但不影响用户体验
+        switchTimeoutRef.current = setTimeout(() => {
+          console.log('Switching to page:', pageId);
+          setCurrentPageId(pageId);
+          setDragOverPageId(null);
+        }, 150); // 减少到 150ms，更快响应
+      }
+    } else {
+      // 离开侧边栏按钮区域
+      setDragOverPageId(null);
+    }
+  };
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (switchTimeoutRef.current) {
+        clearTimeout(switchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     
     setActiveId(null);
 
-    const draggedFromGrid = gridItems.find(item => item.id === active.id);
+    // 确定目标页面：如果拖到侧边栏按钮上，使用按钮对应的页面
+    let targetPageId = currentPageId;
+    if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
+      targetPageId = over.id.replace('sidebar-button-', '');
+    }
+
+    // 查找被拖拽的图标（可能在任何页面或 Dock 中）
+    let draggedFromGrid: any = null;
+    let sourcePageId: string | null = null;
+    
+    // 在所有页面中查找
+    for (const [pageId, items] of Object.entries(pageGridItems)) {
+      const found = items.find(item => item.id === active.id);
+      if (found) {
+        draggedFromGrid = found;
+        sourcePageId = pageId;
+        break;
+      }
+    }
+    
     const draggedFromDock = dockItems.find(item => item.id === active.id);
 
-    // 从宫格拖到 Dock
-    if (over?.id === 'dock-droppable' && draggedFromGrid) {
-      if (!dockItems.find(dockItem => dockItem.id === draggedFromGrid.id)) {
-        // 添加到 Dock
-        const newDockItems = [...dockItems, draggedFromGrid];
-        setDockItems(newDockItems);
+    // 如果拖到了侧边栏按钮上，将图标移动到目标页面
+    if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
+      if (draggedFromGrid && sourcePageId) {
+        // 从源页面移除
+        const sourceItems = pageGridItems[sourcePageId].filter(item => item.id !== active.id);
+        // 添加到目标页面
+        const targetItems = [...(pageGridItems[targetPageId] || []), draggedFromGrid];
         
-        // 从宫格移除
-        const newGridItems = gridItems.filter(item => item.id !== active.id);
-        setGridItems(newGridItems);
+        const newPageGridItems = {
+          ...pageGridItems,
+          [sourcePageId]: sourceItems,
+          [targetPageId]: targetItems,
+        };
+        
+        setPageGridItems(newPageGridItems);
+        setCurrentPageId(targetPageId);
+        setDragOverPageId(null);
         
         // 保存到 KV
         try {
@@ -80,12 +201,75 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              key: 'icon_items',
-              value: JSON.stringify(newGridItems),
+              key: 'page_grid_items',
+              value: JSON.stringify(newPageGridItems),
             }),
           });
         } catch (error) {
-          console.error('Failed to save icon items:', error);
+          console.error('Failed to save page grid items:', error);
+        }
+      } else if (draggedFromDock) {
+        // 从 Dock 拖到侧边栏按钮（添加到目标页面）
+        const targetItems = [...(pageGridItems[targetPageId] || []), draggedFromDock];
+        const newDockItems = dockItems.filter(item => item.id !== active.id);
+        
+        const newPageGridItems = {
+          ...pageGridItems,
+          [targetPageId]: targetItems,
+        };
+        
+        setPageGridItems(newPageGridItems);
+        setDockItems(newDockItems);
+        setCurrentPageId(targetPageId);
+        setDragOverPageId(null);
+        
+        // 保存到 KV
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'page_grid_items',
+              value: JSON.stringify(newPageGridItems),
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to save page grid items:', error);
+        }
+      }
+      return;
+    }
+
+    setDragOverPageId(null);
+
+    // 获取当前页面的图标数据
+    const currentGridItems = pageGridItems[currentPageId] || [];
+    const currentDraggedFromGrid = currentGridItems.find(item => item.id === active.id);
+
+    // 从宫格拖到 Dock
+    if (over?.id === 'dock-droppable' && currentDraggedFromGrid) {
+      if (!dockItems.find(dockItem => dockItem.id === currentDraggedFromGrid.id)) {
+        // 添加到 Dock
+        const newDockItems = [...dockItems, currentDraggedFromGrid];
+        setDockItems(newDockItems);
+        
+        // 从当前页面的宫格移除
+        const newGridItems = currentGridItems.filter(item => item.id !== active.id);
+        const newPageGridItems = { ...pageGridItems, [currentPageId]: newGridItems };
+        setPageGridItems(newPageGridItems);
+        
+        // 保存到 KV
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'page_grid_items',
+              value: JSON.stringify(newPageGridItems),
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to save page grid items:', error);
         }
       }
       return;
@@ -93,10 +277,11 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
 
     // 从 Dock 拖回宫格
     if (over?.id === 'grid-droppable' && draggedFromDock) {
-      if (!gridItems.find(item => item.id === draggedFromDock.id)) {
-        // 添加到宫格
-        const newGridItems = [...gridItems, draggedFromDock];
-        setGridItems(newGridItems);
+      if (!currentGridItems.find(item => item.id === draggedFromDock.id)) {
+        // 添加到当前页面的宫格
+        const newGridItems = [...currentGridItems, draggedFromDock];
+        const newPageGridItems = { ...pageGridItems, [currentPageId]: newGridItems };
+        setPageGridItems(newPageGridItems);
         
         // 从 Dock 移除
         const newDockItems = dockItems.filter(item => item.id !== active.id);
@@ -108,27 +293,28 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              key: 'icon_items',
-              value: JSON.stringify(newGridItems),
+              key: 'page_grid_items',
+              value: JSON.stringify(newPageGridItems),
             }),
           });
         } catch (error) {
-          console.error('Failed to save icon items:', error);
+          console.error('Failed to save page grid items:', error);
         }
       }
       return;
     }
 
     // Grid 内部排序
-    if (draggedFromGrid && active.id !== over?.id && over?.id) {
-      const oldIndex = gridItems.findIndex((item) => item.id === active.id);
-      const newIndex = gridItems.findIndex((item) => item.id === over.id);
+    if (currentDraggedFromGrid && active.id !== over?.id && over?.id) {
+      const oldIndex = currentGridItems.findIndex((item) => item.id === active.id);
+      const newIndex = currentGridItems.findIndex((item) => item.id === over.id);
       
       if (oldIndex !== -1 && newIndex !== -1) {
-        const newItems = [...gridItems];
+        const newItems = [...currentGridItems];
         const [movedItem] = newItems.splice(oldIndex, 1);
         newItems.splice(newIndex, 0, movedItem);
-        setGridItems(newItems);
+        const newPageGridItems = { ...pageGridItems, [currentPageId]: newItems };
+        setPageGridItems(newPageGridItems);
         
         // 保存到 KV
         try {
@@ -136,12 +322,12 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              key: 'icon_items',
-              value: JSON.stringify(newItems),
+              key: 'page_grid_items',
+              value: JSON.stringify(newPageGridItems),
             }),
           });
         } catch (error) {
-          console.error('Failed to save icon items:', error);
+          console.error('Failed to save page grid items:', error);
         }
       }
     }
@@ -257,8 +443,9 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       <main className="h-dvh w-full" onContextMenu={handleContextMenu}>
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={customCollisionDetection}
           onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
           <div className="relative h-full w-full">
@@ -283,6 +470,8 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                     initialSidebarItems={sidebarItems}
                     wheelScroll={currentSidebarSettings.wheelScroll}
                     width={currentSidebarSettings.width}
+                    onPageChange={setCurrentPageId}
+                    currentPageId={currentPageId}
                   />
                 </div>
                 <div 
@@ -306,8 +495,20 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                       <DraggableGrid 
                         openInNewTab={openInNewTab.icon} 
                         iconStyle={currentIconStyle} 
-                        initialItems={gridItems}
-                        onItemsChange={setGridItems}
+                        initialItems={pageGridItems[currentPageId] || []}
+                        onItemsChange={(newItems) => {
+                          const newPageGridItems = { ...pageGridItems, [currentPageId]: newItems };
+                          setPageGridItems(newPageGridItems);
+                          // 保存到 KV
+                          fetch('/api/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              key: 'page_grid_items',
+                              value: JSON.stringify(newPageGridItems),
+                            }),
+                          }).catch(error => console.error('Failed to save page grid items:', error));
+                        }}
                       />
                     </div>
                   </div>
@@ -376,7 +577,8 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             {activeId ? (
               <DragOverlayItem 
                 id={activeId}
-                gridItems={gridItems}
+                pageGridItems={pageGridItems}
+                currentPageId={currentPageId}
                 dockItems={dockItems}
                 iconStyle={currentIconStyle}
               />
@@ -391,16 +593,23 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
 // DragOverlay 中显示的图标组件
 const DragOverlayItem = ({ 
   id, 
-  gridItems, 
+  pageGridItems,
+  currentPageId,
   dockItems, 
   iconStyle 
 }: { 
   id: string;
-  gridItems: any[];
+  pageGridItems: Record<string, any[]>;
+  currentPageId: string;
   dockItems: any[];
   iconStyle: IconStyleSettings;
 }) => {
-  const item = [...gridItems, ...dockItems].find(i => i.id === id);
+  // 从所有页面和 Dock 中查找图标
+  const allItems = [
+    ...Object.values(pageGridItems).flat(),
+    ...dockItems
+  ];
+  const item = allItems.find(i => i.id === id);
   
   if (!item) return null;
 
@@ -546,10 +755,19 @@ export async function getServerSideProps() {
         };
       }
 
-      // 读取图标数据
-      const iconItemsStr = await NEWTAB_KV.get('icon_items');
-      if (iconItemsStr) {
-        iconItems = JSON.parse(iconItemsStr);
+      // 读取图标数据（兼容旧格式）
+      const pageGridItemsStr = await NEWTAB_KV.get('page_grid_items');
+      if (pageGridItemsStr) {
+        const pageData = JSON.parse(pageGridItemsStr);
+        // 使用第一个页面的数据作为 iconItems
+        const firstPageId = Object.keys(pageData)[0];
+        iconItems = firstPageId ? pageData[firstPageId] : null;
+      } else {
+        // 兼容旧的单页面数据
+        const iconItemsStr = await NEWTAB_KV.get('icon_items');
+        if (iconItemsStr) {
+          iconItems = JSON.parse(iconItemsStr);
+        }
       }
     }
   } catch (error) {
