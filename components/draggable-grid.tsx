@@ -657,7 +657,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
       {/* 添加图标对话框 */}
       <AnimatePresence>
         {isDialogOpen && (
-          <>
+          <Portal.Root>
             {/* 遮罩 */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -859,7 +859,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
                 )}
               </div>
             </motion.div>
-          </>
+          </Portal.Root>
         )}
       </AnimatePresence>
     </>
