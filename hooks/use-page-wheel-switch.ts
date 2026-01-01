@@ -11,6 +11,7 @@ export function usePageWheelSwitch(
   enabled: boolean = true
 ) {
   const [animationDirection, setAnimationDirection] = useState<AnimationDirection>(null);
+  const animationDirectionRef = useRef<AnimationDirection>(null);
   const isAnimatingRef = useRef(false);
   const wheelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastWheelTimeRef = useRef(0);
@@ -25,9 +26,9 @@ export function usePageWheelSwitch(
         return;
       }
 
-      // 防抖：短时间内只响应一次滚轮（更严格的防抖）
+      // 防抖：短时间内只响应一次滚轮
       const now = Date.now();
-      if (now - lastWheelTimeRef.current < 800) {
+      if (now - lastWheelTimeRef.current < 600) {
         e.preventDefault();
         return;
       }
@@ -60,7 +61,8 @@ export function usePageWheelSwitch(
         
         lastWheelTimeRef.current = now;
         
-        // 设置动画方向
+        // 同时更新 state 和 ref，确保动画方向正确
+        animationDirectionRef.current = direction;
         setAnimationDirection(direction);
         isAnimatingRef.current = true;
 
@@ -69,9 +71,9 @@ export function usePageWheelSwitch(
         
         // 动画完成后重置状态
         setTimeout(() => {
-          setAnimationDirection(null);
           isAnimatingRef.current = false;
-        }, 600); // 与动画时长匹配
+          // 不重置 animationDirection，保持上一次的方向
+        }, 550); // 略长于动画时长
       }
     };
 

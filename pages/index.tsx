@@ -22,7 +22,7 @@ import { imageCache } from "@/lib/image-cache";
 import { createCustomCollisionDetection } from "@/lib/collision-detection";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
 export const config = {
@@ -52,6 +52,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   const [currentSidebarSettings, setCurrentSidebarSettings] = useState<SidebarSettings>(sidebarSettings);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [dockItems, setDockItems] = useState<any[]>(initialDockItems || []);
+  const [currentSidebarItems, setCurrentSidebarItems] = useState<SidebarItem[]>(sidebarItems || []);
   const [pageGridItems, setPageGridItems] = useState<Record<string, any[]>>(() => {
     const firstPageId = sidebarItems?.[0]?.id || '1';
     return { [firstPageId]: iconItems || [] };
@@ -78,7 +79,12 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
   const { contextMenuPosition, handleContextMenu, closeContextMenu } = useContextMenu();
-  const { animationDirection } = usePageWheelSwitch(sidebarItems, currentPageId, setCurrentPageId, currentLayoutMode === 'component');
+  const { animationDirection } = usePageWheelSwitch(currentSidebarItems, currentPageId, setCurrentPageId, currentLayoutMode === 'component');
+
+  // 调试动画方向
+  useEffect(() => {
+    console.log('[Animation] Direction changed to:', animationDirection, 'Page:', currentPageId);
+  }, [animationDirection, currentPageId]);
 
   // 数据同步 - 检查远程数据是否有更新
   useDataSync((field, data) => {
@@ -206,6 +212,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                     width={currentSidebarSettings.width}
                     onPageChange={setCurrentPageId}
                     currentPageId={currentPageId}
+                    onItemsChange={setCurrentSidebarItems}
                   />
                 </div>
                 <div 
@@ -224,63 +231,61 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                     />
                   </div>
                   
-                  {/* 图标网格区域 */}
-                  <div className="flex-1 overflow-y-auto overflow-x-hidden flex justify-center px-8 pb-8">
-                    <div 
-                      className="w-full"
-                      style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
+                  {/* 图标网格区域 - 轮播容器 */}
+                  <div className="flex-1 relative overflow-hidden">
+                    <motion.div
+                      className="w-full h-full flex flex-col"
+                      animate={{
+                        y: (() => {
+                          if (!currentSidebarItems || currentSidebarItems.length === 0) return '0%';
+                          const currentIndex = currentSidebarItems.findIndex(item => item.id === currentPageId);
+                          return `${-currentIndex * 100}%`;
+                        })()
+                      }}
+                      transition={{
+                        duration: 0.5,
+                        ease: [0.32, 0.72, 0, 1]
+                      }}
                     >
-                      <AnimatePresence mode="wait" initial={false}>
-                        <motion.div
-                          key={currentPageId}
-                          initial={
-                            animationDirection === 'up' 
-                              ? { opacity: 0, y: -200 }
-                              : animationDirection === 'down'
-                              ? { opacity: 0, y: 200 }
-                              : false
-                          }
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={
-                            animationDirection === 'up'
-                              ? { opacity: 0, y: 200 }
-                              : animationDirection === 'down'
-                              ? { opacity: 0, y: -200 }
-                              : { opacity: 0 }
-                          }
-                          transition={{
-                            duration: 0.4,
-                            ease: [0.4, 0, 0.2, 1]
-                          }}
+                      {currentSidebarItems && currentSidebarItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="w-full flex-shrink-0 overflow-y-auto overflow-x-hidden flex justify-center px-8 pb-8"
+                          style={{ height: '100%' }}
                         >
-                          <DraggableGrid 
-                            openInNewTab={openInNewTab.icon} 
-                            iconStyle={currentIconStyle} 
-                            allPageItems={pageGridItems}
-                            currentPageId={currentPageId}
-                            onItemsChange={async (newPageGridItems) => {
-                              setPageGridItems(newPageGridItems);
-                              // 保存到 KV
-                              try {
-                                await fetch('/api/settings', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    key: 'page_grid_items',
-                                    value: JSON.stringify(newPageGridItems),
-                                  }),
-                                });
-                                // 更新时间戳
-                                const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
-                                await updateRemoteTimestamp('gridIcons');
-                              } catch (error) {
-                                console.error('Failed to save page grid items:', error);
-                              }
-                            }}
-                          />
-                        </motion.div>
-                      </AnimatePresence>
-                    </div>
+                          <div 
+                            className="w-full"
+                            style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
+                          >
+                            <DraggableGrid 
+                              openInNewTab={openInNewTab.icon} 
+                              iconStyle={currentIconStyle} 
+                              allPageItems={pageGridItems}
+                              currentPageId={item.id}
+                              onItemsChange={async (newPageGridItems) => {
+                                setPageGridItems(newPageGridItems);
+                                // 保存到 KV
+                                try {
+                                  await fetch('/api/settings', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      key: 'page_grid_items',
+                                      value: JSON.stringify(newPageGridItems),
+                                    }),
+                                  });
+                                  // 更新时间戳
+                                  const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+                                  await updateRemoteTimestamp('gridIcons');
+                                } catch (error) {
+                                  console.error('Failed to save page grid items:', error);
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </motion.div>
                   </div>
 
                   {/* Dock 栏 */}

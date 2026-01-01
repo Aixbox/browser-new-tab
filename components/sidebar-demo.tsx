@@ -13,6 +13,7 @@ interface SidebarDemoProps {
   width?: number;
   onPageChange?: (pageId: string) => void;
   currentPageId?: string;
+  onItemsChange?: (items: SidebarItem[]) => void;
 }
 
 const defaultItems: SidebarItem[] = [
@@ -33,9 +34,16 @@ const defaultItems: SidebarItem[] = [
   },
 ];
 
-export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems, wheelScroll = false, width = 64, onPageChange, currentPageId }: SidebarDemoProps) => {
+export const SidebarDemo = ({ onAvatarClick, avatarUrl, initialSidebarItems, wheelScroll = false, width = 64, onPageChange, currentPageId, onItemsChange }: SidebarDemoProps) => {
   const [items, setItems] = useState<SidebarItem[]>(initialSidebarItems || defaultItems);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 当 items 变化时通知父组件
+  useEffect(() => {
+    if (onItemsChange) {
+      onItemsChange(items);
+    }
+  }, [items, onItemsChange]);
 
   // 当从服务端获取到初始数据时更新
   useEffect(() => {
