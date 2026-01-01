@@ -56,11 +56,11 @@ export default async function handler(request: NextRequest) {
     // 获取图片数据
     const imageBuffer = await response.arrayBuffer();
     
-    // 返回图片，设置适当的缓存头
+    // 返回图片，设置长期缓存头
     return new Response(imageBuffer, {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        'Cache-Control': 'public, max-age=2592000, immutable', // 30天缓存
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET',
         'Content-Length': imageBuffer.byteLength.toString(),
@@ -74,7 +74,7 @@ export default async function handler(request: NextRequest) {
     return new Response('Icon not found', { 
       status: 404,
       headers: {
-        'Cache-Control': 'public, max-age=300',
+        'Cache-Control': 'public, max-age=3600', // 错误也缓存1小时
       }
     });
   }

@@ -18,10 +18,10 @@ import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { usePageWheelSwitch } from "@/hooks/use-page-wheel-switch";
 import { useDataSync } from "@/hooks/use-data-sync";
 import { createDragHandlers } from "@/lib/drag-handlers";
+import { imageCache } from "@/lib/image-cache";
 import { createCustomCollisionDetection } from "@/lib/collision-detection";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
-import type { SyncTimestamps } from "@/lib/sync-manager";
 import { AnimatePresence, motion } from "framer-motion";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
@@ -130,6 +130,33 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         break;
     }
   });
+
+  // 预加载所有图标和图片
+  useEffect(() => {
+    const imagesToPreload: string[] = [];
+
+    // 收集所有页面的图标
+    Object.values(pageGridItems).forEach((items: any[]) => {
+      items.forEach((item: any) => {
+        if (item.iconLogo) imagesToPreload.push(item.iconLogo);
+        if (item.iconImage) imagesToPreload.push(item.iconImage);
+      });
+    });
+
+    // 收集 Dock 图标
+    dockItems.forEach((item: any) => {
+      if (item.iconLogo) imagesToPreload.push(item.iconLogo);
+      if (item.iconImage) imagesToPreload.push(item.iconImage);
+    });
+
+    // 收集头像
+    if (avatarUrl) imagesToPreload.push(avatarUrl);
+
+    // 批量预加载
+    if (imagesToPreload.length > 0) {
+      imageCache.preloadBatch(imagesToPreload);
+    }
+  }, [pageGridItems, dockItems, avatarUrl]);
 
   // 清理定时器
   useEffect(() => {
