@@ -271,6 +271,9 @@ async function handleDropToDock(
           value: JSON.stringify(newDockItems),
         }),
       });
+      // 更新时间戳
+      const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+      await updateRemoteTimestamp('dockIcons');
     } catch (error) {
       console.error('Failed to save dock items:', error);
     }
@@ -404,14 +407,23 @@ function handleDockReorder(
     setState.setDockItems(newItems);
     
     // 保存 Dock 数据到 KV
-    fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        key: 'dock_items',
-        value: JSON.stringify(newItems),
-      }),
-    }).catch(error => console.error('Failed to save dock items:', error));
+    (async () => {
+      try {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: 'dock_items',
+            value: JSON.stringify(newItems),
+          }),
+        });
+        // 更新时间戳
+        const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+        await updateRemoteTimestamp('dockIcons');
+      } catch (error) {
+        console.error('Failed to save dock items:', error);
+      }
+    })();
   }
 }
 
@@ -425,6 +437,9 @@ async function savePageGridItems(pageGridItems: Record<string, any[]>) {
         value: JSON.stringify(pageGridItems),
       }),
     });
+    // 更新时间戳
+    const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+    await updateRemoteTimestamp('gridIcons');
   } catch (error) {
     console.error('Failed to save page grid items:', error);
   }

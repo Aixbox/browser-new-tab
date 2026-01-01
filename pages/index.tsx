@@ -16,10 +16,12 @@ import { useSettingsSync } from "@/hooks/use-settings-sync";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { usePageWheelSwitch } from "@/hooks/use-page-wheel-switch";
+import { useDataSync } from "@/hooks/use-data-sync";
 import { createDragHandlers } from "@/lib/drag-handlers";
 import { createCustomCollisionDetection } from "@/lib/collision-detection";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
+import type { SyncTimestamps } from "@/lib/sync-manager";
 import { AnimatePresence, motion } from "framer-motion";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
@@ -77,6 +79,57 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
   const { contextMenuPosition, handleContextMenu, closeContextMenu } = useContextMenu();
   const { animationDirection } = usePageWheelSwitch(sidebarItems, currentPageId, setCurrentPageId, currentLayoutMode === 'component');
+
+  // 数据同步 - 检查远程数据是否有更新
+  useDataSync((field, data) => {
+    console.log(`[Sync] Received update for ${field}:`, data);
+    
+    switch (field) {
+      case 'account':
+        // 头像更新需要刷新页面
+        if (data !== avatarUrl) {
+          window.location.reload();
+        }
+        break;
+      
+      case 'openMethod':
+        // 打开方式设置
+        window.dispatchEvent(new CustomEvent('openInNewTabChanged', { detail: data }));
+        break;
+      
+      case 'icon':
+        // 图标样式
+        setCurrentIconStyle(data);
+        window.dispatchEvent(new CustomEvent('iconStyleChanged', { detail: data }));
+        break;
+      
+      case 'theme':
+        // 背景
+        setCurrentBackgroundUrl(data);
+        window.dispatchEvent(new CustomEvent('backgroundChanged', { detail: { url: data } }));
+        break;
+      
+      case 'layout':
+        // 布局模式
+        setCurrentLayoutMode(data);
+        window.dispatchEvent(new CustomEvent('layoutModeChanged', { detail: { mode: data } }));
+        break;
+      
+      case 'sidebar':
+        // 侧边栏设置
+        setCurrentSidebarSettings(data);
+        window.dispatchEvent(new CustomEvent('sidebarSettingsChanged', { detail: data }));
+        break;
+      
+      case 'sidebarButtons':
+      case 'gridIcons':
+      case 'dockIcons':
+      case 'searchEngines':
+        // 这些数据更新需要刷新页面
+        window.location.reload();
+        break;
+    }
+  });
 
   // 清理定时器
   useEffect(() => {
@@ -178,17 +231,24 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                             iconStyle={currentIconStyle} 
                             allPageItems={pageGridItems}
                             currentPageId={currentPageId}
-                            onItemsChange={(newPageGridItems) => {
+                            onItemsChange={async (newPageGridItems) => {
                               setPageGridItems(newPageGridItems);
                               // 保存到 KV
-                              fetch('/api/settings', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  key: 'page_grid_items',
-                                  value: JSON.stringify(newPageGridItems),
-                                }),
-                              }).catch(error => console.error('Failed to save page grid items:', error));
+                              try {
+                                await fetch('/api/settings', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    key: 'page_grid_items',
+                                    value: JSON.stringify(newPageGridItems),
+                                  }),
+                                });
+                                // 更新时间戳
+                                const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+                                await updateRemoteTimestamp('gridIcons');
+                              } catch (error) {
+                                console.error('Failed to save page grid items:', error);
+                              }
                             }}
                           />
                         </motion.div>
@@ -212,6 +272,9 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                               value: JSON.stringify(newDockItems),
                             }),
                           });
+                          // 更新时间戳
+                          const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+                          await updateRemoteTimestamp('dockIcons');
                         } catch (error) {
                           console.error('Failed to save dock items:', error);
                         }

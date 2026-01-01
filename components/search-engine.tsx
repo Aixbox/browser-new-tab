@@ -143,6 +143,9 @@ export const SearchEngine = ({
           value: JSON.stringify(engines),
         }),
       });
+      // 更新时间戳
+      const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+      await updateRemoteTimestamp('searchEngines');
     } catch (error) {
       console.error('Failed to save search engines:', error);
     }
@@ -159,6 +162,9 @@ export const SearchEngine = ({
           value: engineId,
         }),
       });
+      // 更新时间戳
+      const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
+      await updateRemoteTimestamp('searchEngines');
     } catch (error) {
       console.error('Failed to save selected engine:', error);
     }
