@@ -15,10 +15,12 @@ import { ContextMenu } from "@/components/context-menu";
 import { useSettingsSync } from "@/hooks/use-settings-sync";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
+import { usePageWheelSwitch } from "@/hooks/use-page-wheel-switch";
 import { createDragHandlers } from "@/lib/drag-handlers";
 import { createCustomCollisionDetection } from "@/lib/collision-detection";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
+import { AnimatePresence, motion } from "framer-motion";
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
 export const config = {
@@ -71,6 +73,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
   const { contextMenuPosition, handleContextMenu, closeContextMenu } = useContextMenu();
+  const { animationDirection } = usePageWheelSwitch(sidebarItems, currentPageId, setCurrentPageId, currentLayoutMode === 'component');
 
   // 清理定时器
   useEffect(() => {
@@ -140,24 +143,49 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                       className="w-full"
                       style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
                     >
-                      <DraggableGrid 
-                        openInNewTab={openInNewTab.icon} 
-                        iconStyle={currentIconStyle} 
-                        allPageItems={pageGridItems}
-                        currentPageId={currentPageId}
-                        onItemsChange={(newPageGridItems) => {
-                          setPageGridItems(newPageGridItems);
-                          // 保存到 KV
-                          fetch('/api/settings', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              key: 'page_grid_items',
-                              value: JSON.stringify(newPageGridItems),
-                            }),
-                          }).catch(error => console.error('Failed to save page grid items:', error));
-                        }}
-                      />
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.div
+                          key={currentPageId}
+                          initial={
+                            animationDirection === 'up' 
+                              ? { opacity: 0, y: -200 }
+                              : animationDirection === 'down'
+                              ? { opacity: 0, y: 200 }
+                              : false
+                          }
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={
+                            animationDirection === 'up'
+                              ? { opacity: 0, y: 200 }
+                              : animationDirection === 'down'
+                              ? { opacity: 0, y: -200 }
+                              : { opacity: 0 }
+                          }
+                          transition={{
+                            duration: 0.4,
+                            ease: [0.4, 0, 0.2, 1]
+                          }}
+                        >
+                          <DraggableGrid 
+                            openInNewTab={openInNewTab.icon} 
+                            iconStyle={currentIconStyle} 
+                            allPageItems={pageGridItems}
+                            currentPageId={currentPageId}
+                            onItemsChange={(newPageGridItems) => {
+                              setPageGridItems(newPageGridItems);
+                              // 保存到 KV
+                              fetch('/api/settings', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  key: 'page_grid_items',
+                                  value: JSON.stringify(newPageGridItems),
+                                }),
+                              }).catch(error => console.error('Failed to save page grid items:', error));
+                            }}
+                          />
+                        </motion.div>
+                      </AnimatePresence>
                     </div>
                   </div>
 

@@ -14,7 +14,8 @@ components/
 hooks/
   ├── use-settings-sync.ts        # 设置同步 Hook
   ├── use-context-menu.ts         # 右键菜单 Hook
-  └── use-sidebar-auto-hide.ts    # 侧边栏自动隐藏 Hook
+  ├── use-sidebar-auto-hide.ts    # 侧边栏自动隐藏 Hook
+  └── use-page-wheel-switch.ts    # 滚轮切换页面 Hook（带动画）
 
 lib/
   ├── drag-handlers.ts            # 拖拽处理逻辑（400+ 行）
@@ -42,6 +43,7 @@ lib/
    - `useSettingsSync` - 监听所有设置变化事件
    - `useContextMenu` - 右键菜单状态管理
    - `useSidebarAutoHide` - 侧边栏自动隐藏逻辑
+   - `usePageWheelSwitch` - 滚轮切换页面（带动画效果）
 
 4. **组件提取**
    - `DragOverlayItem` - 拖拽时的图标显示
@@ -54,3 +56,18 @@ lib/
 - ✅ 便于单元测试
 - ✅ 便于复用
 - ✅ 减少主文件复杂度
+
+### 新功能：滚轮切换页面动画
+
+**功能说明：**
+- 在宫格区域上下滚动滚轮可以切换不同页面
+- 向上滚动：切换到上一页，动画效果是从上方滑入
+- 向下滚动：切换到下一页，动画效果是从下方滑入
+- 使用 Framer Motion 实现流畅的过渡动画
+- 防抖处理，避免快速滚动导致的问题
+
+**实现细节：**
+- `usePageWheelSwitch` Hook 处理滚轮事件和动画状态
+- `AnimatePresence` 组件管理页面切换动画
+- 动画时长 400ms，使用 ease-in-out 缓动函数
+- 只在组件模式下启用，极简模式不受影响
