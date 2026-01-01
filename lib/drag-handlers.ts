@@ -261,6 +261,20 @@ async function handleDropToDock(
     const newDockItems = [...state.dockItems, itemToMove];
     setState.setDockItems(newDockItems);
     
+    // 保存 Dock 数据到 KV
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'dock_items',
+          value: JSON.stringify(newDockItems),
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save dock items:', error);
+    }
+    
     if (fromPageId) {
       const newGridItems = cleanPageGridItems[fromPageId].filter(item => item.id !== activeId);
       const newPageGridItems = { ...cleanPageGridItems, [fromPageId]: newGridItems };
@@ -388,6 +402,16 @@ function handleDockReorder(
     const [movedItem] = newItems.splice(oldIndex, 1);
     newItems.splice(newIndex, 0, movedItem);
     setState.setDockItems(newItems);
+    
+    // 保存 Dock 数据到 KV
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: 'dock_items',
+        value: JSON.stringify(newItems),
+      }),
+    }).catch(error => console.error('Failed to save dock items:', error));
   }
 }
 

@@ -37,16 +37,19 @@ interface HomeProps {
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
   iconItems: any[] | null;
+  dockItems: any[] | null;
+  searchEngines: any[] | null;
+  selectedEngine: string | null;
 }
 
-export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings, iconItems }: HomeProps) {
+export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings, iconItems, dockItems: initialDockItems, searchEngines, selectedEngine }: HomeProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentLayoutMode, setCurrentLayoutMode] = useState<'component' | 'minimal'>(layoutMode);
   const [currentIconStyle, setCurrentIconStyle] = useState<IconStyleSettings>(iconStyle);
   const [currentBackgroundUrl, setCurrentBackgroundUrl] = useState<string | null>(backgroundUrl);
   const [currentSidebarSettings, setCurrentSidebarSettings] = useState<SidebarSettings>(sidebarSettings);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
-  const [dockItems, setDockItems] = useState<any[]>([]);
+  const [dockItems, setDockItems] = useState<any[]>(initialDockItems || []);
   const [pageGridItems, setPageGridItems] = useState<Record<string, any[]>>(() => {
     const firstPageId = sidebarItems?.[0]?.id || '1';
     return { [firstPageId]: iconItems || [] };
@@ -134,7 +137,11 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                   {/* 顶部区域：时间和搜索框 */}
                   <div className="flex-shrink-0 flex flex-col items-center justify-center pt-12 pb-8 gap-6">
                     <SimpleTimeDisplay />
-                    <SearchEngine openInNewTab={openInNewTab.search} />
+                    <SearchEngine 
+                      openInNewTab={openInNewTab.search}
+                      initialSearchEngines={searchEngines}
+                      initialSelectedEngine={selectedEngine}
+                    />
                   </div>
                   
                   {/* 图标网格区域 */}
@@ -193,7 +200,22 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                   <div className="flex-shrink-0">
                     <Dock 
                       items={dockItems}
-                      onItemsChange={setDockItems}
+                      onItemsChange={async (newDockItems) => {
+                        setDockItems(newDockItems);
+                        // 保存到 KV
+                        try {
+                          await fetch('/api/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              key: 'dock_items',
+                              value: JSON.stringify(newDockItems),
+                            }),
+                          });
+                        } catch (error) {
+                          console.error('Failed to save dock items:', error);
+                        }
+                      }}
                       openInNewTab={openInNewTab.icon}
                       iconStyle={currentIconStyle}
                     />
@@ -206,7 +228,11 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
             {currentLayoutMode === 'minimal' && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 p-8 z-10">
                 <SimpleTimeDisplay />
-                <SearchEngine openInNewTab={openInNewTab.search} />
+                <SearchEngine 
+                  openInNewTab={openInNewTab.search}
+                  initialSearchEngines={searchEngines}
+                  initialSelectedEngine={selectedEngine}
+                />
               </div>
             )}
 
@@ -342,6 +368,48 @@ export async function getServerSideProps() {
           iconItems = JSON.parse(iconItemsStr);
         }
       }
+
+      // 读取 Dock 数据
+      const dockItemsStr = await NEWTAB_KV.get('dock_items');
+      let dockItems: any[] | null = null;
+      if (dockItemsStr) {
+        try {
+          dockItems = JSON.parse(dockItemsStr);
+        } catch (error) {
+          console.error('Failed to parse dock items:', error);
+        }
+      }
+
+      // 读取搜索引擎配置
+      const searchEnginesStr = await NEWTAB_KV.get('search_engines');
+      let searchEngines: any[] | null = null;
+      if (searchEnginesStr) {
+        try {
+          searchEngines = JSON.parse(searchEnginesStr);
+        } catch (error) {
+          console.error('Failed to parse search engines:', error);
+        }
+      }
+
+      // 读取选中的搜索引擎
+      const selectedEngine = await NEWTAB_KV.get('selected_engine');
+
+      return {
+        props: {
+          avatarUrl,
+          hasSecretKey,
+          sidebarItems,
+          openInNewTab,
+          layoutMode,
+          iconStyle,
+          backgroundUrl,
+          sidebarSettings,
+          iconItems,
+          dockItems,
+          searchEngines,
+          selectedEngine,
+        },
+      };
     }
   } catch (error) {
     console.error('Failed to load settings from KV:', error);
@@ -358,6 +426,9 @@ export async function getServerSideProps() {
       backgroundUrl,
       sidebarSettings,
       iconItems,
+      dockItems: null,
+      searchEngines: null,
+      selectedEngine: null,
     },
   };
 }

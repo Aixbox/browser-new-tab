@@ -108,10 +108,18 @@ const defaultSearchEngines: SearchEngine[] = [
   },
 ];
 
-export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { openInNewTab?: boolean }) => {
+export const SearchEngine = ({ 
+  openInNewTab: initialOpenInNewTab = true,
+  initialSearchEngines = null,
+  initialSelectedEngine = null
+}: { 
+  openInNewTab?: boolean;
+  initialSearchEngines?: any[] | null;
+  initialSelectedEngine?: string | null;
+}) => {
   const [query, setQuery] = useState("");
-  const [selectedEngine, setSelectedEngine] = useState("google");
-  const [searchEngines, setSearchEngines] = useState<SearchEngine[]>(defaultSearchEngines);
+  const [selectedEngine, setSelectedEngine] = useState(initialSelectedEngine || "google");
+  const [searchEngines, setSearchEngines] = useState<SearchEngine[]>(initialSearchEngines || defaultSearchEngines);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isAddingEngine, setIsAddingEngine] = useState(false);
   const [editingEngine, setEditingEngine] = useState<SearchEngine | null>(null);
@@ -123,6 +131,38 @@ export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { ope
   const [openInNewTab, setOpenInNewTab] = useState(initialOpenInNewTab);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 保存搜索引擎到 KV
+  const saveSearchEngines = async (engines: SearchEngine[]) => {
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'search_engines',
+          value: JSON.stringify(engines),
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save search engines:', error);
+    }
+  };
+
+  // 保存选中的搜索引擎到 KV
+  const saveSelectedEngine = async (engineId: string) => {
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'selected_engine',
+          value: engineId,
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save selected engine:', error);
+    }
+  };
 
   // 监听设置变化
   useEffect(() => {
@@ -241,7 +281,7 @@ export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { ope
     inputRef.current?.focus();
   };
 
-  const handleAddEngine = () => {
+  const handleAddEngine = async () => {
     if (!newEngine.name.trim() || !newEngine.url.trim()) return;
     
     const id = newEngine.name.toLowerCase().replace(/\s+/g, '-');
@@ -264,20 +304,26 @@ export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { ope
       logo: logoUrl
     };
     
-    setSearchEngines([...searchEngines, engine]);
+    const updatedEngines = [...searchEngines, engine];
+    setSearchEngines(updatedEngines);
+    await saveSearchEngines(updatedEngines);
+    
     setNewEngine({ name: "", url: "", logo: "" });
     setIsAddingEngine(false);
   };
 
-  const handleRemoveEngine = (id: string) => {
+  const handleRemoveEngine = async (id: string) => {
     if (searchEngines.length <= 1) return; // 至少保留一个
     
     const updatedEngines = searchEngines.filter(e => e.id !== id);
     setSearchEngines(updatedEngines);
+    await saveSearchEngines(updatedEngines);
     
     // 如果删除的是当前选中的，切换到第一个
     if (selectedEngine === id) {
-      setSelectedEngine(updatedEngines[0].id);
+      const newSelectedId = updatedEngines[0].id;
+      setSelectedEngine(newSelectedId);
+      await saveSelectedEngine(newSelectedId);
     }
   };
 
@@ -291,7 +337,7 @@ export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { ope
     setIsAddingEngine(false);
   };
 
-  const handleUpdateEngine = () => {
+  const handleUpdateEngine = async () => {
     if (!editingEngine || !newEngine.name.trim() || !newEngine.url.trim()) return;
     
     // 如果没有提供logo URL，尝试从搜索URL中提取域名来生成favicon URL
@@ -312,6 +358,8 @@ export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { ope
     );
     
     setSearchEngines(updatedEngines);
+    await saveSearchEngines(updatedEngines);
+    
     setEditingEngine(null);
     setNewEngine({ name: "", url: "", logo: "" });
   };
@@ -426,9 +474,10 @@ export const SearchEngine = ({ openInNewTab: initialOpenInNewTab = true }: { ope
                           ? "bg-primary/30 text-white" 
                           : "hover:bg-white/10 text-white/80"
                       )}
-                      onClick={() => {
+                      onClick={async () => {
                         if (!contextMenuOpen) {
                           setSelectedEngine(engine.id);
+                          await saveSelectedEngine(engine.id);
                           setIsPanelOpen(false);
                         }
                       }}
