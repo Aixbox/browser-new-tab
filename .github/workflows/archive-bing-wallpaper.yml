@@ -142,21 +142,50 @@ jobs:
           done
           
           # 更新存档列表
-          existing_list=$(cat existing_list.json)
-          new_dates=$(cat new_dates.json)
+          node << 'UPDATE_SCRIPT'
+          const fs = require('fs');
+          const https = require('https');
           
-          updated_list=$(node -e "
-            const existing = $existing_list;
-            const newDates = $new_dates;
-            const combined = [...newDates, ...existing];
-            console.log(JSON.stringify(combined));
-          ")
+          let existingList = [];
+          try {
+            const rawData = fs.readFileSync('existing_list.json', 'utf8');
+            const parsed = JSON.parse(rawData);
+            existingList = Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            console.log('Starting with empty list');
+          }
           
-          curl -X PUT \
-            "https://api.cloudflare.com/client/v4/accounts/${{ steps.fetch_account_id.outputs.account_id }}/storage/kv/namespaces/${{ steps.get_kv_id.outputs.kv_id }}/values/bing_wallpaper_archive_list" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "$updated_list"
+          const newDates = JSON.parse(fs.readFileSync('new_dates.json', 'utf8'));
+          const combined = [...newDates, ...existingList];
+          
+          const data = JSON.stringify(combined);
+          const url = `https://api.cloudflare.com/client/v4/accounts/${{ steps.fetch_account_id.outputs.account_id }}/storage/kv/namespaces/${{ steps.get_kv_id.outputs.kv_id }}/values/bing_wallpaper_archive_list`;
+          
+          const options = {
+            method: 'PUT',
+            headers: {
+              'Authorization': 'Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}',
+              'Content-Type': 'application/json',
+              'Content-Length': data.length
+            }
+          };
+          
+          const req = https.request(url, options, (res) => {
+            let responseData = '';
+            res.on('data', (chunk) => { responseData += chunk; });
+            res.on('end', () => {
+              console.log('Archive list update response:', responseData);
+            });
+          });
+          
+          req.on('error', (error) => {
+            console.error('Error updating archive list:', error);
+            process.exit(1);
+          });
+          
+          req.write(data);
+          req.end();
+          UPDATE_SCRIPT
           
           echo "✅ Successfully archived $ARCHIVE_COUNT wallpapers"
         env:
