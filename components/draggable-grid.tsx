@@ -4,9 +4,6 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { HexColorPicker } from "react-colorful";
 import {
   SortableContext,
-  rectSortingStrategy,
-} from "@dnd-kit/sortable";
-import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
@@ -18,6 +15,10 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import * as Portal from "@radix-ui/react-portal";
+import { FolderItemComponent } from "./folder-item";
+
+// 自定义排序策略 - 不自动排序，但提供动画支持
+const noOpSortingStrategy = () => null;
 
 // 图标加载组件 - 支持失败后使用代理
 const IconImage = ({ src, alt, className, style }: { 
@@ -106,7 +107,28 @@ interface IconItem {
   iconImage?: string;
   iconText?: string;
   iconColor?: string;
+  _tempPreview?: boolean;
 }
+
+interface FolderItem {
+  id: string;
+  name: string;
+  type: 'folder';
+  items: IconItem[];
+  _tempPreview?: boolean;
+}
+
+type GridItem = IconItem | FolderItem;
+
+// 辅助函数：判断是否为文件夹
+const isFolder = (item: GridItem): item is FolderItem => {
+  return 'type' in item && item.type === 'folder';
+};
+
+// 辅助函数：判断是否为图标
+const isIcon = (item: GridItem): item is IconItem => {
+  return !isFolder(item);
+};
 
 // 可拖拽的图标项
 const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, onEdit }: { 
@@ -117,6 +139,9 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
   onDelete: (id: string) => void;
   onEdit: (item: IconItem) => void;
 }) => {
+  const [showFolderPreview, setShowFolderPreview] = useState(false);
+  const [wasJustDragging, setWasJustDragging] = useState(false);
+  
   const {
     attributes,
     listeners,
@@ -124,24 +149,57 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id });
+  } = useSortable({ 
+    id: item.id,
+    // 启用布局动画，但只在非拖动状态下
+    animateLayoutChanges: ({ isSorting, wasDragging }) => {
+      // 如果正在排序且之前在拖动，不动画（避免闪烁）
+      if (isSorting && wasDragging) return false;
+      // 其他情况启用动画
+      return true;
+    },
+  });
 
-  // 调试：查看 isDragging 状态
+  // 跟踪拖动状态变化
   useEffect(() => {
-    console.log(`Item ${item.id} isDragging:`, isDragging);
-  }, [isDragging, item.id]);
+    if (isDragging) {
+      setWasJustDragging(true);
+    } else if (wasJustDragging) {
+      // 拖动刚结束，延迟一点点再重置，确保状态同步
+      const timer = setTimeout(() => {
+        setWasJustDragging(false);
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isDragging, wasJustDragging]);
+
+  // 监听文件夹预览事件
+  useEffect(() => {
+    const handleFolderPreview = (e: CustomEvent) => {
+      const { targetId, inFolderMode } = e.detail;
+      setShowFolderPreview(inFolderMode && targetId === item.id);
+    };
+    
+    window.addEventListener('folderPreviewChange', handleFolderPreview as EventListener);
+    return () => window.removeEventListener('folderPreviewChange', handleFolderPreview as EventListener);
+  }, [item.id]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: transform ? transition : 'none',
+    transition: transition ? transition.replace(/opacity[^,]*(,|$)/g, '$1') : undefined,  // 移除 opacity 的过渡
     opacity: isDragging ? 0 : 1,
-    pointerEvents: isDragging ? 'none' : 'auto',
+    willChange: 'transform, opacity',  // 优化性能
   } as React.CSSProperties;
+  
+  // 调试日志
+  if (item.id.includes('test-icon')) {
+    console.log(`[DraggableItem ${item.name}] isDragging: ${isDragging}, opacity: ${isDragging ? 0 : 1}`);
+  }
 
   const renderIcon = () => {
     const iconSize = iconStyle?.size || 80;
     const borderRadius = iconStyle?.borderRadius || 12;
-    const opacity = isDragging ? 0 : (iconStyle?.opacity || 100) / 100;
+    const opacity = (iconStyle?.opacity || 100) / 100;  // 移除 isDragging 检查，因为外层已经处理了
 
     const iconStyle_css = {
       width: `${iconSize}px`,
@@ -202,8 +260,10 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
   };
 
   const handleClick = () => {
-    const target = openInNewTab ? '_blank' : '_self';
-    window.open(item.url, target);
+    if (!isDragging) {
+      const target = openInNewTab ? '_blank' : '_self';
+      window.open(item.url, target);
+    }
   };
 
   const showName = iconStyle?.showName ?? true;
@@ -255,16 +315,22 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
   };
 
   return (
-    <motion.div
+    <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className="relative cursor-grab active:cursor-grabbing"
+      className="relative cursor-grab active:cursor-grabbing overflow-visible"
       onClick={handleClick}
       onContextMenu={handleContextMenu}
     >
-      <div style={{ width: `${iconSize}px`, height: `${iconSize}px` }}>
+      <div 
+        className={cn(
+          "transition-all duration-300",
+          showFolderPreview && "ring-4 ring-blue-400/80 rounded-xl scale-105"
+        )}
+        style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
+      >
         {renderIcon()}
       </div>
       {showName && !isDragging && (
@@ -281,7 +347,7 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
           {item.name}
         </span>
       )}
-    </motion.div>
+    </div>
   );
 };
 
@@ -326,13 +392,15 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
 export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, allPageItems, currentPageId, onItemsChange }: { 
   openInNewTab?: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
-  allPageItems?: Record<string, IconItem[]>;
+  allPageItems?: Record<string, GridItem[]>;
   currentPageId?: string;
-  onItemsChange?: (allPageItems: Record<string, IconItem[]>) => void;
+  onItemsChange?: (allPageItems: Record<string, GridItem[]>) => void;
 }) => {
   // 使用所有页面的数据，但只显示当前页面
-  const [pageItems, setPageItems] = useState<Record<string, IconItem[]>>(allPageItems || {});
+  const [pageItems, setPageItems] = useState<Record<string, GridItem[]>>(allPageItems || {});
   const currentItems = pageItems[currentPageId || '1'] || [];
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
+  const [sortingDisabled, setSortingDisabled] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState<IconItem | null>(null);
@@ -396,6 +464,73 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     if (onItemsChange) {
       onItemsChange(newPageItems);
     }
+  };
+
+  // 处理文件夹编辑（重命名）
+  const handleFolderEdit = (folder: FolderItem) => {
+    const newName = prompt('请输入新的文件夹名称', folder.name);
+    if (newName && newName.trim()) {
+      const newCurrentItems = currentItems.map(item => 
+        item.id === folder.id && isFolder(item)
+          ? { ...item, name: newName.trim() }
+          : item
+      );
+      const newPageItems = { ...pageItems, [currentPageId || '1']: newCurrentItems };
+      setPageItems(newPageItems);
+      
+      if (onItemsChange) {
+        onItemsChange(newPageItems);
+      }
+    }
+  };
+
+  // 从文件夹中移除图标
+  const handleRemoveFromFolder = (folderId: string, itemId: string) => {
+    const folder = currentItems.find(item => item.id === folderId && isFolder(item)) as FolderItem | undefined;
+    if (!folder) return;
+
+    const removedItem = folder.items.find(item => item.id === itemId);
+    if (!removedItem) return;
+
+    // 如果文件夹只剩2个图标，移除一个后解散文件夹
+    if (folder.items.length === 2) {
+      const remainingItem = folder.items.find(item => item.id !== itemId);
+      if (remainingItem) {
+        const newCurrentItems = currentItems.map(item => 
+          item.id === folderId ? remainingItem : item
+        );
+        const newPageItems = { ...pageItems, [currentPageId || '1']: newCurrentItems };
+        setPageItems(newPageItems);
+        
+        if (onItemsChange) {
+          onItemsChange(newPageItems);
+        }
+      }
+    } else {
+      // 更新文件夹，移除图标并将其添加到网格
+      const updatedFolder: FolderItem = {
+        ...folder,
+        items: folder.items.filter(item => item.id !== itemId)
+      };
+      
+      const folderIndex = currentItems.findIndex(item => item.id === folderId);
+      const newCurrentItems = [...currentItems];
+      newCurrentItems[folderIndex] = updatedFolder;
+      newCurrentItems.push(removedItem);
+      
+      const newPageItems = { ...pageItems, [currentPageId || '1']: newCurrentItems };
+      setPageItems(newPageItems);
+      
+      if (onItemsChange) {
+        onItemsChange(newPageItems);
+      }
+    }
+  };
+
+  // 打开文件夹中的图标
+  const handleOpenFolderItem = (item: IconItem) => {
+    const target = openInNewTab ? '_blank' : '_self';
+    window.open(item.url, target);
   };
 
   const handleEdit = (item: IconItem) => {
@@ -481,25 +616,26 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   const handleSave = async (continueAdding: boolean = false) => {
     if (!formData.url.trim() || !formData.name.trim()) return;
 
-    let newCurrentItems: IconItem[];
+    let newCurrentItems: GridItem[];
     const pageId = currentPageId || '1';
 
     if (isEditMode && editingItem) {
       // 编辑模式：更新现有图标
-      newCurrentItems = currentItems.map(item => 
-        item.id === editingItem.id
-          ? {
-              ...item,
-              name: formData.name.trim(),
-              url: formData.url.trim(),
-              iconType: selectedIconType,
-              iconLogo: formData.iconLogo || undefined,
-              iconImage: formData.iconImage || undefined,
-              iconText: formData.iconText || undefined,
-              iconColor: formData.iconColor || undefined,
-            }
-          : item
-      );
+      newCurrentItems = currentItems.map(item => {
+        if (item.id === editingItem.id && isIcon(item)) {
+          return {
+            ...item,
+            name: formData.name.trim(),
+            url: formData.url.trim(),
+            iconType: selectedIconType,
+            iconLogo: formData.iconLogo || undefined,
+            iconImage: formData.iconImage || undefined,
+            iconText: formData.iconText || undefined,
+            iconColor: formData.iconColor || undefined,
+          };
+        }
+        return item;
+      });
     } else {
       // 添加模式：创建新图标
       const newItem: IconItem = {
@@ -624,34 +760,52 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
 
   return (
     <>
-      <div className="w-full" ref={setGridDroppableRef}>
-        <LayoutGroup>
-          <SortableContext items={currentItems} strategy={rectSortingStrategy}>
+      <div className="w-full overflow-visible p-2" ref={setGridDroppableRef}>
+        <SortableContext items={currentItems.map(item => item.id)} strategy={noOpSortingStrategy}>
+          <LayoutGroup>
             <div 
               className={cn(
-                "grid w-full transition-all duration-200",
+                "grid w-full overflow-visible",
                 isGridOver && "bg-white/5 rounded-lg"
               )}
               style={{
                 gridTemplateColumns: `repeat(auto-fill, ${gridMinSize}px)`,
-                gap: `${iconSpacing}px`
+                gap: `${iconSpacing}px`,
+                transition: 'all 0.3s ease-out'
               }}
             >
-              {currentItems.map((item) => (
-                <DraggableItem
-                  key={item.id}
-                  item={item}
-                  openInNewTab={openInNewTab}
-                  iconStyle={iconStyle}
-                  nameMaxWidth={nameMaxWidth}
-                  onDelete={handleDelete}
-                  onEdit={handleEdit}
-                />
-              ))}
+              {currentItems.map((item) => {
+                if (isFolder(item)) {
+                  return (
+                    <FolderItemComponent
+                      key={item.id}
+                      folder={item}
+                      openInNewTab={openInNewTab}
+                      iconStyle={iconStyle}
+                      nameMaxWidth={nameMaxWidth}
+                      onDelete={handleDelete}
+                      onEdit={handleFolderEdit}
+                      onRemoveItem={handleRemoveFromFolder}
+                      onOpenItem={handleOpenFolderItem}
+                    />
+                  );
+                }
+                return (
+                  <DraggableItem
+                    key={item.id}
+                    item={item}
+                    openInNewTab={openInNewTab}
+                    iconStyle={iconStyle}
+                    nameMaxWidth={nameMaxWidth}
+                    onDelete={handleDelete}
+                    onEdit={handleEdit}
+                  />
+                );
+              })}
               <AddIconItem onClick={() => setIsDialogOpen(true)} iconSize={iconSize} nameMaxWidth={nameMaxWidth} />
             </div>
-          </SortableContext>
-        </LayoutGroup>
+          </LayoutGroup>
+        </SortableContext>
       </div>
 
       {/* 添加图标对话框 */}

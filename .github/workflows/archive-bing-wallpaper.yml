@@ -33,7 +33,6 @@ jobs:
         id: get_kv_id
         run: |
           # 从 Terraform 输出获取 KV Namespace ID
-          cd deploy
           terraform init
           KV_ID=$(terraform output -raw kv_namespace_id 2>/dev/null || echo "")
           

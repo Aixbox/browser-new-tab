@@ -55,7 +55,50 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   const [currentSidebarItems, setCurrentSidebarItems] = useState<SidebarItem[]>(sidebarItems || []);
   const [pageGridItems, setPageGridItems] = useState<Record<string, any[]>>(() => {
     const firstPageId = sidebarItems?.[0]?.id || '1';
-    return { [firstPageId]: iconItems || [] };
+    
+    // 创建 30 个不同的测试图标
+    const testSites = [
+      { name: 'Bilibili', url: 'https://www.bilibili.com/', icon: 'https://www.bilibili.com/favicon.ico' },
+      { name: 'GitHub', url: 'https://github.com/', icon: 'https://github.com/favicon.ico' },
+      { name: 'Google', url: 'https://www.google.com/', icon: 'https://www.google.com/favicon.ico' },
+      { name: 'YouTube', url: 'https://www.youtube.com/', icon: 'https://www.youtube.com/favicon.ico' },
+      { name: 'Twitter', url: 'https://twitter.com/', icon: 'https://twitter.com/favicon.ico' },
+      { name: 'Reddit', url: 'https://www.reddit.com/', icon: 'https://www.reddit.com/favicon.ico' },
+      { name: 'Stack Overflow', url: 'https://stackoverflow.com/', icon: 'https://stackoverflow.com/favicon.ico' },
+      { name: 'MDN', url: 'https://developer.mozilla.org/', icon: 'https://developer.mozilla.org/favicon.ico' },
+      { name: 'Wikipedia', url: 'https://www.wikipedia.org/', icon: 'https://www.wikipedia.org/favicon.ico' },
+      { name: 'Amazon', url: 'https://www.amazon.com/', icon: 'https://www.amazon.com/favicon.ico' },
+      { name: 'Netflix', url: 'https://www.netflix.com/', icon: 'https://www.netflix.com/favicon.ico' },
+      { name: 'Spotify', url: 'https://www.spotify.com/', icon: 'https://www.spotify.com/favicon.ico' },
+      { name: 'Discord', url: 'https://discord.com/', icon: 'https://discord.com/favicon.ico' },
+      { name: 'Twitch', url: 'https://www.twitch.tv/', icon: 'https://www.twitch.tv/favicon.ico' },
+      { name: 'LinkedIn', url: 'https://www.linkedin.com/', icon: 'https://www.linkedin.com/favicon.ico' },
+      { name: 'Instagram', url: 'https://www.instagram.com/', icon: 'https://www.instagram.com/favicon.ico' },
+      { name: 'Facebook', url: 'https://www.facebook.com/', icon: 'https://www.facebook.com/favicon.ico' },
+      { name: 'TikTok', url: 'https://www.tiktok.com/', icon: 'https://www.tiktok.com/favicon.ico' },
+      { name: 'Zhihu', url: 'https://www.zhihu.com/', icon: 'https://www.zhihu.com/favicon.ico' },
+      { name: 'Weibo', url: 'https://weibo.com/', icon: 'https://weibo.com/favicon.ico' },
+      { name: 'Taobao', url: 'https://www.taobao.com/', icon: 'https://www.taobao.com/favicon.ico' },
+      { name: 'JD', url: 'https://www.jd.com/', icon: 'https://www.jd.com/favicon.ico' },
+      { name: 'Baidu', url: 'https://www.baidu.com/', icon: 'https://www.baidu.com/favicon.ico' },
+      { name: 'Douban', url: 'https://www.douban.com/', icon: 'https://www.douban.com/favicon.ico' },
+      { name: 'Dribbble', url: 'https://dribbble.com/', icon: 'https://dribbble.com/favicon.ico' },
+      { name: 'Behance', url: 'https://www.behance.net/', icon: 'https://www.behance.net/favicon.ico' },
+      { name: 'Medium', url: 'https://medium.com/', icon: 'https://medium.com/favicon.ico' },
+      { name: 'Dev.to', url: 'https://dev.to/', icon: 'https://dev.to/favicon.ico' },
+      { name: 'Hacker News', url: 'https://news.ycombinator.com/', icon: 'https://news.ycombinator.com/favicon.ico' },
+      { name: 'Product Hunt', url: 'https://www.producthunt.com/', icon: 'https://www.producthunt.com/favicon.ico' },
+    ];
+    
+    const testIcons = testSites.map((site, i) => ({
+      id: `test-icon-${Date.now()}-${i}`,
+      name: site.name,
+      url: site.url,
+      iconType: 'logo' as const,
+      iconLogo: site.icon,
+    }));
+    
+    return { [firstPageId]: testIcons };
   });
   const [currentPageId, setCurrentPageId] = useState<string>(sidebarItems?.[0]?.id || '1');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -85,6 +128,51 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   useEffect(() => {
     console.log('[Animation] Direction changed to:', animationDirection, 'Page:', currentPageId);
   }, [animationDirection, currentPageId]);
+
+  // 监听排序模式变化 - 实时重排数组
+  useEffect(() => {
+    let lastSortTime = 0;
+    const SORT_THROTTLE = 100; // 100ms 节流
+    
+    const handleSortingMode = (e: CustomEvent) => {
+      console.log('[Index] Received sortingModeChange event:', e.detail);
+      const { activeId, targetId, inSortingMode } = e.detail;
+      
+      if (inSortingMode && activeId && targetId) {
+        const now = Date.now();
+        if (now - lastSortTime < SORT_THROTTLE) {
+          console.log('[Index] Throttled, skipping sort');
+          return;
+        }
+        lastSortTime = now;
+        
+        console.log('[Index] Sorting mode activated, reordering:', activeId, '→', targetId);
+        
+        const currentItems = pageGridItems[currentPageId] || [];
+        const oldIndex = currentItems.findIndex((item: any) => item.id === activeId);
+        const newIndex = currentItems.findIndex((item: any) => item.id === targetId);
+        
+        console.log('[Index] oldIndex:', oldIndex, 'newIndex:', newIndex, 'currentItems:', currentItems.length);
+        
+        if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+          const newItems = [...currentItems];
+          // 移除拖动的图标
+          const [movedItem] = newItems.splice(oldIndex, 1);
+          // 插入到目标位置
+          newItems.splice(newIndex, 0, movedItem);
+          
+          console.log('[Index] Reordered items, updating state');
+          setPageGridItems({
+            ...pageGridItems,
+            [currentPageId]: newItems
+          });
+        }
+      }
+    };
+    
+    window.addEventListener('sortingModeChange', handleSortingMode as EventListener);
+    return () => window.removeEventListener('sortingModeChange', handleSortingMode as EventListener);
+  }, [pageGridItems, currentPageId]);
 
   // 数据同步 - 检查远程数据是否有更新
   useDataSync((field, data) => {
@@ -250,7 +338,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
                       {currentSidebarItems && currentSidebarItems.map((item) => (
                         <div
                           key={item.id}
-                          className="w-full flex-shrink-0 overflow-y-auto overflow-x-hidden flex justify-center px-8 pb-8"
+                          className="w-full flex-shrink-0 overflow-y-auto overflow-x-visible flex justify-center px-8 pb-8"
                           style={{ height: '100%' }}
                         >
                           <div 

@@ -1,15 +1,48 @@
 // 拖拽相关的处理逻辑
-import { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
+import { isInFolderCreationMode, resetHoverState } from "./collision-detection";
+
+interface IconItem {
+  id: string;
+  name: string;
+  url: string;
+  iconType: 'logo' | 'image' | 'text';
+  iconLogo?: string;
+  iconImage?: string;
+  iconText?: string;
+  iconColor?: string;
+  _tempPreview?: boolean;
+}
+
+interface FolderItem {
+  id: string;
+  name: string;
+  type: 'folder';
+  items: IconItem[];
+  _tempPreview?: boolean;
+}
+
+type GridItem = IconItem | FolderItem;
+
+// 辅助函数：判断是否为文件夹
+const isFolder = (item: GridItem): item is FolderItem => {
+  return 'type' in item && item.type === 'folder';
+};
+
+// 辅助函数：判断是否为图标
+const isIcon = (item: GridItem): item is IconItem => {
+  return !isFolder(item);
+};
 
 export interface DragState {
-  pageGridItems: Record<string, any[]>;
+  pageGridItems: Record<string, GridItem[]>;
   currentPageId: string;
   dockItems: any[];
 }
 
 export interface DragHandlers {
   onDragStart: (event: DragStartEvent) => void;
-  onDragOver: (event: any) => void;
+  onDragOver: (event: DragOverEvent) => void;
   onDragEnd: (event: DragEndEvent) => Promise<void>;
 }
 
@@ -19,7 +52,7 @@ export function createDragHandlers(
     setActiveId: (id: string | null) => void;
     setDragOverPageId: (id: string | null) => void;
     setCurrentPageId: (id: string) => void;
-    setPageGridItems: (items: Record<string, any[]>) => void;
+    setPageGridItems: (items: Record<string, GridItem[]>) => void;
     setDockItems: (items: any[]) => void;
   },
   switchTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>
@@ -27,14 +60,11 @@ export function createDragHandlers(
   
   const handleDragStart = (event: DragStartEvent) => {
     setState.setActiveId(event.active.id as string);
+    resetHoverState();
   };
 
-  const handleDragOver = (event: any) => {
+  const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
-    
-    if (over?.id) {
-      console.log('DragOver - over.id:', over.id);
-    }
     
     // 清除之前的定时器
     if (switchTimeoutRef.current) {
@@ -50,17 +80,18 @@ export function createDragHandlers(
         setState.setDragOverPageId(pageId);
         
         switchTimeoutRef.current = setTimeout(() => {
-          console.log('Switching to page:', pageId);
           setState.setCurrentPageId(pageId);
           setState.setDragOverPageId(null);
         }, 150);
       }
+      
+      return;
     } else {
       setState.setDragOverPageId(null);
     }
     
-    // 跨页面拖拽预览
-    if (active && over?.id && !over.id.toString().startsWith('sidebar-button-') && over.id !== 'dock-droppable') {
+    // 跨页面拖拽预览（只在非文件夹创建模式下）
+    if (!isInFolderCreationMode() && active && over?.id && !over.id.toString().startsWith('sidebar-button-') && over.id !== 'dock-droppable') {
       const currentItems = state.pageGridItems[state.currentPageId] || [];
       const isInCurrentPage = currentItems.some(item => item.id === active.id);
       
@@ -91,23 +122,46 @@ export function createDragHandlers(
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     
-    console.log('DragEnd - active.id:', active.id, 'over?.id:', over?.id);
+    console.log('=== DragEnd Debug ===');
+    console.log('active.id:', active.id);
+    console.log('over?.id:', over?.id);
+    console.log('isInFolderCreationMode:', isInFolderCreationMode());
     
     setState.setActiveId(null);
+    
+    // 通知文件夹对话框拖动已结束
+    window.dispatchEvent(new CustomEvent('folderDragEnd'));
+    
+    const wasInFolderMode = isInFolderCreationMode();
+    resetHoverState();
 
     // 清理临时预览
     const cleanPageGridItems = Object.fromEntries(
       Object.entries(state.pageGridItems).map(([pageId, items]) => [
         pageId,
-        items.filter(item => !item._tempPreview)
+        items.filter(item => !('_tempPreview' in item && item._tempPreview))
       ])
     );
 
     // 查找拖拽源
-    let draggedFromGrid: any = null;
+    let draggedFromGrid: GridItem | null = null;
     let sourcePageId: string | null = null;
+    let draggedFromFolder: { folderId: string; item: IconItem } | null = null;
     
+    // 先检查是否从文件夹中拖出
     for (const [pageId, items] of Object.entries(cleanPageGridItems)) {
+      for (const item of items) {
+        if (isFolder(item)) {
+          const foundInFolder = item.items.find(folderItem => folderItem.id === active.id);
+          if (foundInFolder) {
+            draggedFromFolder = { folderId: item.id, item: foundInFolder };
+            sourcePageId = pageId;
+            break;
+          }
+        }
+      }
+      if (draggedFromFolder) break;
+      
       const found = items.find(item => item.id === active.id);
       if (found) {
         draggedFromGrid = found;
@@ -117,6 +171,106 @@ export function createDragHandlers(
     }
     
     const draggedFromDock = state.dockItems.find(item => item.id === active.id);
+
+    // 如果从文件夹拖出且没有拖到任何目标（拖到背景），从文件夹移除
+    if (draggedFromFolder && !over) {
+      console.log('Dragged from folder to background, removing from folder');
+      await handleRemoveIconFromFolder(
+        draggedFromFolder.folderId,
+        draggedFromFolder.item.id,
+        sourcePageId,
+        cleanPageGridItems,
+        state,
+        setState
+      );
+      return;
+    }
+
+    // 如果从文件夹拖出到宫格，从文件夹移除并添加到宫格
+    if (draggedFromFolder && over?.id === 'grid-droppable') {
+      console.log('Dragged from folder to grid, moving to grid');
+      await handleMoveFromFolderToGrid(
+        draggedFromFolder.folderId,
+        draggedFromFolder.item,
+        sourcePageId,
+        cleanPageGridItems,
+        state,
+        setState
+      );
+      return;
+    }
+
+    // 如果从文件夹拖出到另一个图标上
+    if (draggedFromFolder && over?.id && over.id !== active.id && !over.id.toString().startsWith('sidebar-button-') && over.id !== 'dock-droppable' && over.id !== 'grid-droppable') {
+      const currentGridItems = cleanPageGridItems[state.currentPageId] || [];
+      const targetItem = currentGridItems.find(item => item.id === over.id);
+      
+      // 如果目标是文件夹，添加到文件夹
+      if (targetItem && isFolder(targetItem)) {
+        console.log('Dragged from folder to another folder');
+        await handleMoveFromFolderToFolder(
+          draggedFromFolder.folderId,
+          draggedFromFolder.item,
+          targetItem.id,
+          sourcePageId,
+          cleanPageGridItems,
+          state,
+          setState
+        );
+        return;
+      }
+      
+      // 如果目标是普通图标，从文件夹移除并插入到目标位置
+      if (targetItem && isIcon(targetItem)) {
+        console.log('Dragged from folder to grid icon position');
+        await handleMoveFromFolderToGridPosition(
+          draggedFromFolder.folderId,
+          draggedFromFolder.item,
+          over.id as string,
+          sourcePageId,
+          cleanPageGridItems,
+          state,
+          setState
+        );
+        return;
+      }
+    }
+
+    // 检查是否拖到另一个图标上
+    if (over?.id && over.id !== active.id && !over.id.toString().startsWith('sidebar-button-') && over.id !== 'dock-droppable' && over.id !== 'grid-droppable') {
+      const currentGridItems = cleanPageGridItems[state.currentPageId] || [];
+      const targetItem = currentGridItems.find(item => item.id === over.id);
+      
+      // 如果在文件夹创建模式下，且目标是普通图标，创建文件夹
+      if (wasInFolderMode && targetItem && draggedFromGrid && isIcon(targetItem) && isIcon(draggedFromGrid) && sourcePageId === state.currentPageId) {
+        console.log('Creating folder (was in folder mode)!');
+        await handleCreateFolder(
+          active.id as string,
+          over.id as string,
+          draggedFromGrid,
+          targetItem,
+          cleanPageGridItems,
+          state,
+          setState
+        );
+        return;
+      }
+      
+      // 如果目标是文件夹且拖拽源是图标，添加到文件夹
+      if (targetItem && isFolder(targetItem) && draggedFromGrid && isIcon(draggedFromGrid)) {
+        console.log('Adding to folder!');
+        await handleAddToFolder(
+          active.id as string,
+          targetItem,
+          draggedFromGrid,
+          sourcePageId,
+          cleanPageGridItems,
+          state,
+          setState
+        );
+        return;
+      }
+    }
 
     // 拖到侧边栏按钮
     if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
@@ -141,14 +295,17 @@ export function createDragHandlers(
 
     // 拖到 Dock
     if (over?.id === 'dock-droppable' && (currentDraggedFromGrid || draggedFromGrid)) {
-      await handleDropToDock(
-        active.id as string,
-        currentDraggedFromGrid || draggedFromGrid,
-        currentDraggedFromGrid ? state.currentPageId : sourcePageId,
-        cleanPageGridItems,
-        state,
-        setState
-      );
+      const itemToMove = currentDraggedFromGrid || draggedFromGrid;
+      if (itemToMove) {
+        await handleDropToDock(
+          active.id as string,
+          itemToMove,
+          currentDraggedFromGrid ? state.currentPageId : sourcePageId,
+          cleanPageGridItems,
+          state,
+          setState
+        );
+      }
       return;
     }
 
@@ -206,13 +363,96 @@ export function createDragHandlers(
 }
 
 // 辅助函数
+// 创建文件夹
+async function handleCreateFolder(
+  activeId: string,
+  targetId: string,
+  draggedItem: IconItem,
+  targetItem: IconItem,
+  cleanPageGridItems: Record<string, GridItem[]>,
+  state: DragState,
+  setState: any
+) {
+  const currentGridItems = cleanPageGridItems[state.currentPageId] || [];
+  
+  // 创建新文件夹
+  const newFolder: FolderItem = {
+    id: `folder-${Date.now()}`,
+    name: '新文件夹',
+    type: 'folder',
+    items: [targetItem, draggedItem]
+  };
+  
+  // 移除两个原始图标，添加文件夹
+  const newCurrentItems = currentGridItems
+    .filter(item => item.id !== activeId && item.id !== targetId);
+  
+  // 在目标位置插入文件夹
+  const targetIndex = currentGridItems.findIndex(item => item.id === targetId);
+  newCurrentItems.splice(targetIndex, 0, newFolder);
+  
+  const newPageGridItems = {
+    ...cleanPageGridItems,
+    [state.currentPageId]: newCurrentItems
+  };
+  
+  setState.setPageGridItems(newPageGridItems);
+  await savePageGridItems(newPageGridItems);
+}
+
+// 添加图标到文件夹
+async function handleAddToFolder(
+  activeId: string,
+  targetFolder: FolderItem,
+  draggedItem: IconItem,
+  sourcePageId: string | null,
+  cleanPageGridItems: Record<string, GridItem[]>,
+  state: DragState,
+  setState: any
+) {
+  // 检查图标是否已在文件夹中
+  if (targetFolder.items.some(item => item.id === activeId)) {
+    return;
+  }
+  
+  const currentGridItems = cleanPageGridItems[state.currentPageId] || [];
+  
+  // 更新文件夹，添加新图标
+  const updatedFolder: FolderItem = {
+    ...targetFolder,
+    items: [...targetFolder.items, draggedItem]
+  };
+  
+  // 替换文件夹
+  const newCurrentItems = currentGridItems.map(item => 
+    item.id === targetFolder.id ? updatedFolder : item
+  );
+  
+  let newPageGridItems = {
+    ...cleanPageGridItems,
+    [state.currentPageId]: newCurrentItems
+  };
+  
+  // 如果是从其他页面拖过来的，需要从源页面移除
+  if (sourcePageId && sourcePageId !== state.currentPageId) {
+    const sourceItems = cleanPageGridItems[sourcePageId].filter(item => item.id !== activeId);
+    newPageGridItems[sourcePageId] = sourceItems;
+  } else if (sourcePageId === state.currentPageId) {
+    // 从当前页面移除原图标
+    newPageGridItems[state.currentPageId] = newCurrentItems.filter(item => item.id !== activeId);
+  }
+  
+  setState.setPageGridItems(newPageGridItems);
+  await savePageGridItems(newPageGridItems);
+}
+
 async function handleDropToSidebarButton(
   activeId: string,
   targetPageId: string,
-  draggedFromGrid: any,
+  draggedFromGrid: GridItem | null,
   sourcePageId: string | null,
   draggedFromDock: any,
-  cleanPageGridItems: Record<string, any[]>,
+  cleanPageGridItems: Record<string, GridItem[]>,
   state: DragState,
   setState: any
 ) {
@@ -251,9 +491,9 @@ async function handleDropToSidebarButton(
 
 async function handleDropToDock(
   activeId: string,
-  itemToMove: any,
+  itemToMove: GridItem,
   fromPageId: string | null,
-  cleanPageGridItems: Record<string, any[]>,
+  cleanPageGridItems: Record<string, GridItem[]>,
   state: DragState,
   setState: any
 ) {
@@ -292,8 +532,8 @@ async function handleDragFromDock(
   activeId: string,
   over: any,
   draggedFromDock: any,
-  cleanPageGridItems: Record<string, any[]>,
-  currentGridItems: any[],
+  cleanPageGridItems: Record<string, GridItem[]>,
+  currentGridItems: GridItem[],
   state: DragState,
   setState: any
 ) {
@@ -341,10 +581,10 @@ async function handleDragFromDock(
 async function handleCrossPageDrag(
   activeId: string,
   over: any,
-  draggedFromGrid: any,
+  draggedFromGrid: GridItem,
   sourcePageId: string,
-  cleanPageGridItems: Record<string, any[]>,
-  currentGridItems: any[],
+  cleanPageGridItems: Record<string, GridItem[]>,
+  currentGridItems: GridItem[],
   state: DragState,
   setState: any
 ) {
@@ -373,7 +613,7 @@ async function handleCrossPageDrag(
 async function handleSamePageReorder(
   activeId: string,
   overId: string,
-  currentGridItems: any[],
+  currentGridItems: GridItem[],
   state: DragState,
   setState: any
 ) {
@@ -427,7 +667,7 @@ function handleDockReorder(
   }
 }
 
-async function savePageGridItems(pageGridItems: Record<string, any[]>) {
+async function savePageGridItems(pageGridItems: Record<string, GridItem[]>) {
   try {
     await fetch('/api/settings', {
       method: 'POST',
@@ -444,3 +684,199 @@ async function savePageGridItems(pageGridItems: Record<string, any[]>) {
     console.error('Failed to save page grid items:', error);
   }
 }
+
+// 从文件夹中移除图标
+async function handleRemoveIconFromFolder(
+  folderId: string,
+  itemId: string,
+  sourcePageId: string | null,
+  cleanPageGridItems: Record<string, GridItem[]>,
+  state: DragState,
+  setState: any
+) {
+  if (!sourcePageId) return;
+  
+  const currentGridItems = cleanPageGridItems[sourcePageId] || [];
+  const folder = currentGridItems.find(item => item.id === folderId && isFolder(item)) as FolderItem | undefined;
+  if (!folder) return;
+
+  const removedItem = folder.items.find(item => item.id === itemId);
+  if (!removedItem) return;
+
+  // 如果文件夹只剩2个图标，移除一个后解散文件夹
+  if (folder.items.length === 2) {
+    const remainingItem = folder.items.find(item => item.id !== itemId);
+    if (remainingItem) {
+      // 用剩余的图标替换文件夹
+      const newCurrentItems = currentGridItems.map(item => 
+        item.id === folderId ? remainingItem : item
+      );
+      const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+      setState.setPageGridItems(newPageItems);
+      await savePageGridItems(newPageItems);
+    }
+  } else if (folder.items.length === 1) {
+    // 如果只剩1个图标，直接删除文件夹
+    const newCurrentItems = currentGridItems.filter(item => item.id !== folderId);
+    const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+    setState.setPageGridItems(newPageItems);
+    await savePageGridItems(newPageItems);
+  } else {
+    // 更新文件夹，移除图标
+    const updatedFolder: FolderItem = {
+      ...folder,
+      items: folder.items.filter(item => item.id !== itemId)
+    };
+    
+    const newCurrentItems = currentGridItems.map(item => 
+      item.id === folderId ? updatedFolder : item
+    );
+    const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+    setState.setPageGridItems(newPageItems);
+    await savePageGridItems(newPageItems);
+  }
+}
+
+// 从文件夹移动到宫格
+async function handleMoveFromFolderToGrid(
+  folderId: string,
+  item: IconItem,
+  sourcePageId: string | null,
+  cleanPageGridItems: Record<string, GridItem[]>,
+  state: DragState,
+  setState: any
+) {
+  if (!sourcePageId) return;
+  
+  const currentGridItems = cleanPageGridItems[sourcePageId] || [];
+  const folder = currentGridItems.find(f => f.id === folderId && isFolder(f)) as FolderItem | undefined;
+  if (!folder) return;
+
+  // 如果文件夹只剩2个图标，移除一个后解散文件夹
+  if (folder.items.length === 2) {
+    const remainingItem = folder.items.find(i => i.id !== item.id);
+    if (remainingItem) {
+      const newCurrentItems = currentGridItems.map(i => 
+        i.id === folderId ? remainingItem : i
+      );
+      newCurrentItems.push(item);
+      const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+      setState.setPageGridItems(newPageItems);
+      await savePageGridItems(newPageItems);
+    }
+  } else {
+    // 更新文件夹，移除图标并添加到宫格
+    const updatedFolder: FolderItem = {
+      ...folder,
+      items: folder.items.filter(i => i.id !== item.id)
+    };
+    
+    const newCurrentItems = currentGridItems.map(i => 
+      i.id === folderId ? updatedFolder : i
+    );
+    newCurrentItems.push(item);
+    const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+    setState.setPageGridItems(newPageItems);
+    await savePageGridItems(newPageItems);
+  }
+}
+
+// 从文件夹移动到另一个文件夹
+async function handleMoveFromFolderToFolder(
+  sourceFolderId: string,
+  item: IconItem,
+  targetFolderId: string,
+  sourcePageId: string | null,
+  cleanPageGridItems: Record<string, GridItem[]>,
+  state: DragState,
+  setState: any
+) {
+  if (!sourcePageId) return;
+  
+  const currentGridItems = cleanPageGridItems[sourcePageId] || [];
+  const sourceFolder = currentGridItems.find(f => f.id === sourceFolderId && isFolder(f)) as FolderItem | undefined;
+  const targetFolder = currentGridItems.find(f => f.id === targetFolderId && isFolder(f)) as FolderItem | undefined;
+  if (!sourceFolder || !targetFolder) return;
+
+  // 更新源文件夹
+  const updatedSourceFolder: FolderItem = {
+    ...sourceFolder,
+    items: sourceFolder.items.filter(i => i.id !== item.id)
+  };
+  
+  // 更新目标文件夹
+  const updatedTargetFolder: FolderItem = {
+    ...targetFolder,
+    items: [...targetFolder.items, item]
+  };
+  
+  let newCurrentItems = currentGridItems.map(i => {
+    if (i.id === sourceFolderId) return updatedSourceFolder;
+    if (i.id === targetFolderId) return updatedTargetFolder;
+    return i;
+  });
+  
+  // 如果源文件夹只剩1个图标，解散文件夹
+  if (updatedSourceFolder.items.length === 1) {
+    const remainingItem = updatedSourceFolder.items[0];
+    newCurrentItems = newCurrentItems.map(i => 
+      i.id === sourceFolderId ? remainingItem : i
+    );
+  } else if (updatedSourceFolder.items.length === 0) {
+    newCurrentItems = newCurrentItems.filter(i => i.id !== sourceFolderId);
+  }
+  
+  const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+  setState.setPageGridItems(newPageItems);
+  await savePageGridItems(newPageItems);
+}
+
+// 从文件夹移动到宫格指定位置
+async function handleMoveFromFolderToGridPosition(
+  folderId: string,
+  item: IconItem,
+  targetId: string,
+  sourcePageId: string | null,
+  cleanPageGridItems: Record<string, GridItem[]>,
+  state: DragState,
+  setState: any
+) {
+  if (!sourcePageId) return;
+  
+  const currentGridItems = cleanPageGridItems[sourcePageId] || [];
+  const folder = currentGridItems.find(f => f.id === folderId && isFolder(f)) as FolderItem | undefined;
+  if (!folder) return;
+
+  const targetIndex = currentGridItems.findIndex(i => i.id === targetId);
+  if (targetIndex === -1) return;
+
+  // 如果文件夹只剩2个图标，移除一个后解散文件夹
+  if (folder.items.length === 2) {
+    const remainingItem = folder.items.find(i => i.id !== item.id);
+    if (remainingItem) {
+      let newCurrentItems = currentGridItems.map(i => 
+        i.id === folderId ? remainingItem : i
+      );
+      newCurrentItems.splice(targetIndex, 0, item);
+      const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+      setState.setPageGridItems(newPageItems);
+      await savePageGridItems(newPageItems);
+    }
+  } else {
+    // 更新文件夹，移除图标并插入到指定位置
+    const updatedFolder: FolderItem = {
+      ...folder,
+      items: folder.items.filter(i => i.id !== item.id)
+    };
+    
+    let newCurrentItems = currentGridItems.map(i => 
+      i.id === folderId ? updatedFolder : i
+    );
+    newCurrentItems.splice(targetIndex, 0, item);
+    const newPageItems = { ...cleanPageGridItems, [sourcePageId]: newCurrentItems };
+    setState.setPageGridItems(newPageItems);
+    await savePageGridItems(newPageItems);
+  }
+}
+
+

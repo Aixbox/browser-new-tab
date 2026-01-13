@@ -16,11 +16,25 @@ export function DragOverlayItem({
   dockItems, 
   iconStyle 
 }: DragOverlayItemProps) {
+  // 先在顶层查找
   const allItems = [
     ...Object.values(pageGridItems).flat(),
     ...dockItems
   ];
-  const item = allItems.find(i => i.id === id);
+  let item = allItems.find(i => i.id === id);
+  
+  // 如果没找到，在文件夹内部查找
+  if (!item) {
+    for (const pageItem of allItems) {
+      if (pageItem.type === 'folder' && pageItem.items) {
+        const foundInFolder = pageItem.items.find((folderItem: any) => folderItem.id === id);
+        if (foundInFolder) {
+          item = foundInFolder;
+          break;
+        }
+      }
+    }
+  }
   
   if (!item) return null;
 
