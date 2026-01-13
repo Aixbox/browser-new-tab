@@ -71,7 +71,17 @@ jobs:
           node << 'SCRIPT'
           const fs = require('fs');
           const bingData = JSON.parse(fs.readFileSync('bing_data.json', 'utf8'));
-          const existingList = JSON.parse(fs.readFileSync('existing_list.json', 'utf8'));
+          let existingList = [];
+          
+          try {
+            const rawData = fs.readFileSync('existing_list.json', 'utf8');
+            const parsed = JSON.parse(rawData);
+            existingList = Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            console.log('No existing list found or invalid format, starting fresh');
+            existingList = [];
+          }
+          
           const existingDates = new Set(existingList);
           
           const newWallpapers = [];
