@@ -20,7 +20,7 @@ let hoverState: {
 };
 
 const EDGE_HOVER_DELAY = 500; // 外围悬停 500ms 触发排序
-const CENTER_HOVER_DELAY = 500; // 中心悬停 500ms 进入文件夹模式
+const CENTER_HOVER_DELAY = 350; // 中心悬停 500ms 进入文件夹模式
 
 // 清除定时器
 function clearHoverTimer() {
@@ -34,8 +34,8 @@ function clearHoverTimer() {
 function isInCenterRegion(x: number, y: number, rect: ClientRect): boolean {
   const centerX = rect.left + rect.width / 2;
   const centerY = rect.top + rect.height / 2;
-  const halfWidth = rect.width / 4; // 中心 50% 区域
-  const halfHeight = rect.height / 4;
+  const halfWidth = rect.width / 2.8; // 中心 50% 区域
+  const halfHeight = rect.height / 2.8;
   
   return (
     x >= centerX - halfWidth &&
