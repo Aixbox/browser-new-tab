@@ -59,9 +59,42 @@ export function createDragHandlers(
 ): DragHandlers {
   
   const handleDragStart = (event: DragStartEvent) => {
-    setState.setActiveId(event.active.id as string);
+    const activeId = event.active.id as string;
+    setState.setActiveId(activeId);
     resetHoverState();
+
+    // 从文件夹内拖拽时，先在网格中插入临时占位，支持实时排序动画
+    let draggedFromFolderItem: IconItem | null = null;
+    let sourcePageId: string | null = null;
+
+    for (const [pageId, items] of Object.entries(state.pageGridItems)) {
+      for (const item of items) {
+        if (isFolder(item)) {
+          const foundInFolder = item.items.find(folderItem => folderItem.id === activeId);
+          if (foundInFolder) {
+            draggedFromFolderItem = foundInFolder;
+            sourcePageId = pageId;
+            break;
+          }
+        }
+      }
+      if (draggedFromFolderItem) break;
+    }
+
+    if (draggedFromFolderItem && sourcePageId) {
+      const currentItems = state.pageGridItems[sourcePageId] || [];
+      const alreadyInGrid = currentItems.some(item => item.id === activeId);
+
+      if (!alreadyInGrid) {
+        const newPageGridItems = {
+          ...state.pageGridItems,
+          [sourcePageId]: [...currentItems, { ...draggedFromFolderItem, _tempPreview: true }]
+        };
+        setState.setPageGridItems(newPageGridItems);
+      }
+    }
   };
+
 
   const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
