@@ -1,28 +1,21 @@
-import { useState, useEffect, useRef } from "react";
-import Head from "next/head";
-import { KVNamespace } from '@cloudflare/workers-types';
-import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core";
-import { Background } from "@/components/background";
-import { SidebarDemo } from "@/components/sidebar-demo";
-import { SearchEngine } from "@/components/search-engine";
-import { SimpleTimeDisplay } from "@/components/simple-time-display";
-import { DraggableGrid } from "@/components/draggable-grid";
-import { SettingsDialog } from "@/components/settings-drawer";
-import { Dock } from "@/components/dock";
-import { SidebarItem } from "@/components/custom-sidebar";
-import { DragOverlayItem } from "@/components/drag-overlay-item";
-import { ContextMenu } from "@/components/context-menu";
+import { useEffect, useRef, useState } from "react";
+import { KVNamespace } from "@cloudflare/workers-types";
+import { PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { ComponentLayout, HomeShell, MinimalLayout } from "@/components/home";
+import type { SidebarItem } from "@/components/custom-sidebar";
+import type { IconStyleSettings } from "@/components/icon-settings";
+import type { SidebarSettings } from "@/components/sidebar-settings";
+import { useHomeState } from "@/hooks/use-home-state";
 import { useSettingsSync } from "@/hooks/use-settings-sync";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { usePageWheelSwitch } from "@/hooks/use-page-wheel-switch";
-import { useDataSync } from "@/hooks/use-data-sync";
+import { usePreloadAssets } from "@/hooks/use-preload-assets";
+import { useSortingMode } from "@/hooks/use-sorting-mode";
+import { useSyncListeners } from "@/hooks/use-sync-listeners";
 import { createDragHandlers } from "@/lib/drag-handlers";
-import { imageCache } from "@/lib/image-cache";
 import { createCustomCollisionDetection } from "@/lib/collision-detection";
-import type { IconStyleSettings } from "@/components/icon-settings";
-import type { SidebarSettings } from "@/components/sidebar-settings";
-import { motion } from "framer-motion";
+
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
 export const config = {
@@ -45,64 +38,85 @@ interface HomeProps {
 }
 
 export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings, iconItems, dockItems: initialDockItems, searchEngines, selectedEngine }: HomeProps) {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [currentLayoutMode, setCurrentLayoutMode] = useState<'component' | 'minimal'>(layoutMode);
-  const [currentIconStyle, setCurrentIconStyle] = useState<IconStyleSettings>(iconStyle);
-  const [currentBackgroundUrl, setCurrentBackgroundUrl] = useState<string | null>(backgroundUrl);
-  const [currentSidebarSettings, setCurrentSidebarSettings] = useState<SidebarSettings>(sidebarSettings);
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
-  const [dockItems, setDockItems] = useState<any[]>(initialDockItems || []);
-  const [currentSidebarItems, setCurrentSidebarItems] = useState<SidebarItem[]>(sidebarItems || []);
+  const {
+    isSettingsOpen,
+    setIsSettingsOpen,
+    currentLayoutMode,
+    setCurrentLayoutMode,
+    currentIconStyle,
+    setCurrentIconStyle,
+    currentBackgroundUrl,
+    setCurrentBackgroundUrl,
+    currentSidebarSettings,
+    setCurrentSidebarSettings,
+    isSidebarVisible,
+    setIsSidebarVisible,
+    dockItems,
+    setDockItems,
+    currentSidebarItems,
+    setCurrentSidebarItems,
+    currentPageId,
+    setCurrentPageId,
+    activeId,
+    setActiveId,
+    dragOverPageId,
+    setDragOverPageId,
+  } = useHomeState({
+    layoutMode,
+    iconStyle,
+    backgroundUrl,
+    sidebarSettings,
+    sidebarItems,
+    dockItems: initialDockItems,
+  });
+
   const [pageGridItems, setPageGridItems] = useState<Record<string, any[]>>(() => {
-    const firstPageId = sidebarItems?.[0]?.id || '1';
-    
-    // 创建 30 个不同的测试图标
+    const firstPageId = sidebarItems?.[0]?.id || "1";
+
     const testSites = [
-      { name: 'Bilibili', url: 'https://www.bilibili.com/', icon: 'https://www.bilibili.com/favicon.ico' },
-      { name: 'GitHub', url: 'https://github.com/', icon: 'https://github.com/favicon.ico' },
-      { name: 'Google', url: 'https://www.google.com/', icon: 'https://www.google.com/favicon.ico' },
-      { name: 'YouTube', url: 'https://www.youtube.com/', icon: 'https://www.youtube.com/favicon.ico' },
-      { name: 'Twitter', url: 'https://twitter.com/', icon: 'https://twitter.com/favicon.ico' },
-      { name: 'Reddit', url: 'https://www.reddit.com/', icon: 'https://www.reddit.com/favicon.ico' },
-      { name: 'Stack Overflow', url: 'https://stackoverflow.com/', icon: 'https://stackoverflow.com/favicon.ico' },
-      { name: 'MDN', url: 'https://developer.mozilla.org/', icon: 'https://developer.mozilla.org/favicon.ico' },
-      { name: 'Wikipedia', url: 'https://www.wikipedia.org/', icon: 'https://www.wikipedia.org/favicon.ico' },
-      { name: 'Amazon', url: 'https://www.amazon.com/', icon: 'https://www.amazon.com/favicon.ico' },
-      { name: 'Netflix', url: 'https://www.netflix.com/', icon: 'https://www.netflix.com/favicon.ico' },
-      { name: 'Spotify', url: 'https://www.spotify.com/', icon: 'https://www.spotify.com/favicon.ico' },
-      { name: 'Discord', url: 'https://discord.com/', icon: 'https://discord.com/favicon.ico' },
-      { name: 'Twitch', url: 'https://www.twitch.tv/', icon: 'https://www.twitch.tv/favicon.ico' },
-      { name: 'LinkedIn', url: 'https://www.linkedin.com/', icon: 'https://www.linkedin.com/favicon.ico' },
-      { name: 'Instagram', url: 'https://www.instagram.com/', icon: 'https://www.instagram.com/favicon.ico' },
-      { name: 'Facebook', url: 'https://www.facebook.com/', icon: 'https://www.facebook.com/favicon.ico' },
-      { name: 'TikTok', url: 'https://www.tiktok.com/', icon: 'https://www.tiktok.com/favicon.ico' },
-      { name: 'Zhihu', url: 'https://www.zhihu.com/', icon: 'https://www.zhihu.com/favicon.ico' },
-      { name: 'Weibo', url: 'https://weibo.com/', icon: 'https://weibo.com/favicon.ico' },
-      { name: 'Taobao', url: 'https://www.taobao.com/', icon: 'https://www.taobao.com/favicon.ico' },
-      { name: 'JD', url: 'https://www.jd.com/', icon: 'https://www.jd.com/favicon.ico' },
-      { name: 'Baidu', url: 'https://www.baidu.com/', icon: 'https://www.baidu.com/favicon.ico' },
-      { name: 'Douban', url: 'https://www.douban.com/', icon: 'https://www.douban.com/favicon.ico' },
-      { name: 'Dribbble', url: 'https://dribbble.com/', icon: 'https://dribbble.com/favicon.ico' },
-      { name: 'Behance', url: 'https://www.behance.net/', icon: 'https://www.behance.net/favicon.ico' },
-      { name: 'Medium', url: 'https://medium.com/', icon: 'https://medium.com/favicon.ico' },
-      { name: 'Dev.to', url: 'https://dev.to/', icon: 'https://dev.to/favicon.ico' },
-      { name: 'Hacker News', url: 'https://news.ycombinator.com/', icon: 'https://news.ycombinator.com/favicon.ico' },
-      { name: 'Product Hunt', url: 'https://www.producthunt.com/', icon: 'https://www.producthunt.com/favicon.ico' },
+      { name: "Bilibili", url: "https://www.bilibili.com/", icon: "https://www.bilibili.com/favicon.ico" },
+      { name: "GitHub", url: "https://github.com/", icon: "https://github.com/favicon.ico" },
+      { name: "Google", url: "https://www.google.com/", icon: "https://www.google.com/favicon.ico" },
+      { name: "YouTube", url: "https://www.youtube.com/", icon: "https://www.youtube.com/favicon.ico" },
+      { name: "Twitter", url: "https://twitter.com/", icon: "https://twitter.com/favicon.ico" },
+      { name: "Reddit", url: "https://www.reddit.com/", icon: "https://www.reddit.com/favicon.ico" },
+      { name: "Stack Overflow", url: "https://stackoverflow.com/", icon: "https://stackoverflow.com/favicon.ico" },
+      { name: "MDN", url: "https://developer.mozilla.org/", icon: "https://developer.mozilla.org/favicon.ico" },
+      { name: "Wikipedia", url: "https://www.wikipedia.org/", icon: "https://www.wikipedia.org/favicon.ico" },
+      { name: "Amazon", url: "https://www.amazon.com/", icon: "https://www.amazon.com/favicon.ico" },
+      { name: "Netflix", url: "https://www.netflix.com/", icon: "https://www.netflix.com/favicon.ico" },
+      { name: "Spotify", url: "https://www.spotify.com/", icon: "https://www.spotify.com/favicon.ico" },
+      { name: "Discord", url: "https://discord.com/", icon: "https://discord.com/favicon.ico" },
+      { name: "Twitch", url: "https://www.twitch.tv/", icon: "https://www.twitch.tv/favicon.ico" },
+      { name: "LinkedIn", url: "https://www.linkedin.com/", icon: "https://www.linkedin.com/favicon.ico" },
+      { name: "Instagram", url: "https://www.instagram.com/", icon: "https://www.instagram.com/favicon.ico" },
+      { name: "Facebook", url: "https://www.facebook.com/", icon: "https://www.facebook.com/favicon.ico" },
+      { name: "TikTok", url: "https://www.tiktok.com/", icon: "https://www.tiktok.com/favicon.ico" },
+      { name: "Zhihu", url: "https://www.zhihu.com/", icon: "https://www.zhihu.com/favicon.ico" },
+      { name: "Weibo", url: "https://weibo.com/", icon: "https://weibo.com/favicon.ico" },
+      { name: "Taobao", url: "https://www.taobao.com/", icon: "https://www.taobao.com/favicon.ico" },
+      { name: "JD", url: "https://www.jd.com/", icon: "https://www.jd.com/favicon.ico" },
+      { name: "Baidu", url: "https://www.baidu.com/", icon: "https://www.baidu.com/favicon.ico" },
+      { name: "Douban", url: "https://www.douban.com/", icon: "https://www.douban.com/favicon.ico" },
+      { name: "Dribbble", url: "https://dribbble.com/", icon: "https://dribbble.com/favicon.ico" },
+      { name: "Behance", url: "https://www.behance.net/", icon: "https://www.behance.net/favicon.ico" },
+      { name: "Medium", url: "https://medium.com/", icon: "https://medium.com/favicon.ico" },
+      { name: "Dev.to", url: "https://dev.to/", icon: "https://dev.to/favicon.ico" },
+      { name: "Hacker News", url: "https://news.ycombinator.com/", icon: "https://news.ycombinator.com/favicon.ico" },
+      { name: "Product Hunt", url: "https://www.producthunt.com/", icon: "https://www.producthunt.com/favicon.ico" },
     ];
-    
+
     const testIcons = testSites.map((site, i) => ({
       id: `test-icon-${Date.now()}-${i}`,
       name: site.name,
       url: site.url,
-      iconType: 'logo' as const,
+      iconType: "logo" as const,
       iconLogo: site.icon,
     }));
-    
+
     return { [firstPageId]: testIcons };
   });
-  const [currentPageId, setCurrentPageId] = useState<string>(sidebarItems?.[0]?.id || '1');
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [dragOverPageId, setDragOverPageId] = useState<string | null>(null);
+
   const switchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const sensors = useSensors(
@@ -122,137 +136,37 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
   const { contextMenuPosition, handleContextMenu, closeContextMenu } = useContextMenu();
-  const { animationDirection } = usePageWheelSwitch(currentSidebarItems, currentPageId, setCurrentPageId, currentLayoutMode === 'component');
+  const { animationDirection } = usePageWheelSwitch(
+    currentSidebarItems,
+    currentPageId,
+    setCurrentPageId,
+    currentLayoutMode === "component"
+  );
 
-  // 调试动画方向
   useEffect(() => {
-    console.log('[Animation] Direction changed to:', animationDirection, 'Page:', currentPageId);
+    console.log("[Animation] Direction changed to:", animationDirection, "Page:", currentPageId);
   }, [animationDirection, currentPageId]);
 
-  // 监听排序模式变化 - 实时重排数组
-  useEffect(() => {
-    let lastSortTime = 0;
-    const SORT_THROTTLE = 100; // 100ms 节流
-    
-    const handleSortingMode = (e: CustomEvent) => {
-      console.log('[Index] Received sortingModeChange event:', e.detail);
-      const { activeId, targetId, inSortingMode } = e.detail;
-      
-      if (inSortingMode && activeId && targetId) {
-        const now = Date.now();
-        if (now - lastSortTime < SORT_THROTTLE) {
-          console.log('[Index] Throttled, skipping sort');
-          return;
-        }
-        lastSortTime = now;
-        
-        console.log('[Index] Sorting mode activated, reordering:', activeId, '→', targetId);
-        
-        const currentItems = pageGridItems[currentPageId] || [];
-        const oldIndex = currentItems.findIndex((item: any) => item.id === activeId);
-        const newIndex = currentItems.findIndex((item: any) => item.id === targetId);
-        
-        console.log('[Index] oldIndex:', oldIndex, 'newIndex:', newIndex, 'currentItems:', currentItems.length);
-        
-        if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-          const newItems = [...currentItems];
-          // 移除拖动的图标
-          const [movedItem] = newItems.splice(oldIndex, 1);
-          // 插入到目标位置
-          newItems.splice(newIndex, 0, movedItem);
-          
-          console.log('[Index] Reordered items, updating state');
-          setPageGridItems({
-            ...pageGridItems,
-            [currentPageId]: newItems
-          });
-        }
-      }
-    };
-    
-    window.addEventListener('sortingModeChange', handleSortingMode as EventListener);
-    return () => window.removeEventListener('sortingModeChange', handleSortingMode as EventListener);
-  }, [pageGridItems, currentPageId]);
-
-  // 数据同步 - 检查远程数据是否有更新
-  useDataSync((field, data) => {
-    console.log(`[Sync] Received update for ${field}:`, data);
-    
-    switch (field) {
-      case 'account':
-        // 头像更新需要刷新页面
-        if (data !== avatarUrl) {
-          window.location.reload();
-        }
-        break;
-      
-      case 'openMethod':
-        // 打开方式设置
-        window.dispatchEvent(new CustomEvent('openInNewTabChanged', { detail: data }));
-        break;
-      
-      case 'icon':
-        // 图标样式
-        setCurrentIconStyle(data);
-        window.dispatchEvent(new CustomEvent('iconStyleChanged', { detail: data }));
-        break;
-      
-      case 'theme':
-        // 背景
-        setCurrentBackgroundUrl(data);
-        window.dispatchEvent(new CustomEvent('backgroundChanged', { detail: { url: data } }));
-        break;
-      
-      case 'layout':
-        // 布局模式
-        setCurrentLayoutMode(data);
-        window.dispatchEvent(new CustomEvent('layoutModeChanged', { detail: { mode: data } }));
-        break;
-      
-      case 'sidebar':
-        // 侧边栏设置
-        setCurrentSidebarSettings(data);
-        window.dispatchEvent(new CustomEvent('sidebarSettingsChanged', { detail: data }));
-        break;
-      
-      case 'sidebarButtons':
-      case 'gridIcons':
-      case 'dockIcons':
-      case 'searchEngines':
-        // 这些数据更新需要刷新页面
-        window.location.reload();
-        break;
-    }
+  useSortingMode({
+    pageGridItems,
+    currentPageId,
+    setPageGridItems,
   });
 
-  // 预加载所有图标和图片
-  useEffect(() => {
-    const imagesToPreload: string[] = [];
+  useSyncListeners({
+    avatarUrl,
+    setCurrentIconStyle,
+    setCurrentBackgroundUrl,
+    setCurrentLayoutMode,
+    setCurrentSidebarSettings,
+  });
 
-    // 收集所有页面的图标
-    Object.values(pageGridItems).forEach((items: any[]) => {
-      items.forEach((item: any) => {
-        if (item.iconLogo) imagesToPreload.push(item.iconLogo);
-        if (item.iconImage) imagesToPreload.push(item.iconImage);
-      });
-    });
+  usePreloadAssets({
+    pageGridItems,
+    dockItems,
+    avatarUrl,
+  });
 
-    // 收集 Dock 图标
-    dockItems.forEach((item: any) => {
-      if (item.iconLogo) imagesToPreload.push(item.iconLogo);
-      if (item.iconImage) imagesToPreload.push(item.iconImage);
-    });
-
-    // 收集头像
-    if (avatarUrl) imagesToPreload.push(avatarUrl);
-
-    // 批量预加载
-    if (imagesToPreload.length > 0) {
-      imageCache.preloadBatch(imagesToPreload);
-    }
-  }, [pageGridItems, dockItems, avatarUrl]);
-
-  // 清理定时器
   useEffect(() => {
     return () => {
       if (switchTimeoutRef.current) {
@@ -262,206 +176,101 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   }, []);
 
   return (
-    <>
-      <Head>
-        <title>新标签页</title>
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
-      <main className="h-dvh w-full" onContextMenu={handleContextMenu}>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={customCollisionDetection}
-          onDragStart={dragHandlers.onDragStart}
-          onDragOver={dragHandlers.onDragOver}
-          onDragEnd={dragHandlers.onDragEnd}
-        >
-          <div className="relative h-full w-full">
-            <Background 
-              src={currentBackgroundUrl || "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/alt-g7Cv2QzqL3k6ey3igjNYkM32d8Fld7.mp4"}
-              placeholder="/alt-placeholder.png" 
-            />
-            
-            {/* 组件模式 */}
-            {currentLayoutMode === 'component' && (
-              <>
-                <div 
-                  className={`absolute top-0 ${currentSidebarSettings.position === 'left' ? 'left-0' : 'right-0'} h-full transition-transform duration-300 z-20`}
-                  style={{
-                    transform: isSidebarVisible ? 'translateX(0)' : currentSidebarSettings.position === 'left' ? 'translateX(-100%)' : 'translateX(100%)',
-                    width: `${currentSidebarSettings.width}px`
-                  }}
-                >
-                  <SidebarDemo 
-                    onAvatarClick={() => setIsSettingsOpen(true)}
-                    avatarUrl={avatarUrl}
-                    initialSidebarItems={sidebarItems}
-                    wheelScroll={currentSidebarSettings.wheelScroll}
-                    width={currentSidebarSettings.width}
-                    onPageChange={setCurrentPageId}
-                    currentPageId={currentPageId}
-                    onItemsChange={setCurrentSidebarItems}
-                  />
-                </div>
-                <div 
-                  className="h-full w-full relative flex flex-col overflow-hidden"
-                  style={{
-                    [currentSidebarSettings.position === 'left' ? 'paddingLeft' : 'paddingRight']: `${currentSidebarSettings.width}px`
-                  }}
-                >
-                  {/* 顶部区域：时间和搜索框 */}
-                  <div className="flex-shrink-0 flex flex-col items-center justify-center pt-12 pb-8 gap-6">
-                    <SimpleTimeDisplay />
-                    <SearchEngine 
-                      openInNewTab={openInNewTab.search}
-                      initialSearchEngines={searchEngines}
-                      initialSelectedEngine={selectedEngine}
-                    />
-                  </div>
-                  
-                  {/* 图标网格区域 - 轮播容器 */}
-                  <div className="flex-1 relative overflow-hidden">
-                    <motion.div
-                      className="w-full h-full flex flex-col"
-                      animate={{
-                        y: (() => {
-                          if (!currentSidebarItems || currentSidebarItems.length === 0) return '0%';
-                          const currentIndex = currentSidebarItems.findIndex(item => item.id === currentPageId);
-                          return `${-currentIndex * 100}%`;
-                        })()
-                      }}
-                      transition={{
-                        duration: 0.5,
-                        ease: [0.32, 0.72, 0, 1]
-                      }}
-                    >
-                      {currentSidebarItems && currentSidebarItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="w-full flex-shrink-0 overflow-y-auto overflow-x-visible flex justify-center px-8 pb-8"
-                          style={{ height: '100%' }}
-                        >
-                          <div 
-                            className="w-full"
-                            style={{ maxWidth: `${currentIconStyle.maxWidth}px` }}
-                          >
-                            <DraggableGrid 
-                              openInNewTab={openInNewTab.icon} 
-                              iconStyle={currentIconStyle} 
-                              allPageItems={pageGridItems}
-                              currentPageId={item.id}
-                              onItemsChange={async (newPageGridItems) => {
-                                setPageGridItems(newPageGridItems);
-                                // 保存到 KV
-                                try {
-                                  await fetch('/api/settings', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      key: 'page_grid_items',
-                                      value: JSON.stringify(newPageGridItems),
-                                    }),
-                                  });
-                                  // 更新时间戳
-                                  const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
-                                  await updateRemoteTimestamp('gridIcons');
-                                } catch (error) {
-                                  console.error('Failed to save page grid items:', error);
-                                }
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </motion.div>
-                  </div>
-
-                  {/* Dock 栏 */}
-                  <div className="flex-shrink-0">
-                    <Dock 
-                      items={dockItems}
-                      onItemsChange={async (newDockItems) => {
-                        setDockItems(newDockItems);
-                        // 保存到 KV
-                        try {
-                          await fetch('/api/settings', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              key: 'dock_items',
-                              value: JSON.stringify(newDockItems),
-                            }),
-                          });
-                          // 更新时间戳
-                          const { updateRemoteTimestamp } = await import('@/hooks/use-data-sync');
-                          await updateRemoteTimestamp('dockIcons');
-                        } catch (error) {
-                          console.error('Failed to save dock items:', error);
-                        }
-                      }}
-                      openInNewTab={openInNewTab.icon}
-                      iconStyle={currentIconStyle}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* 极简模式 */}
-            {currentLayoutMode === 'minimal' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 p-8 z-10">
-                <SimpleTimeDisplay />
-                <SearchEngine 
-                  openInNewTab={openInNewTab.search}
-                  initialSearchEngines={searchEngines}
-                  initialSelectedEngine={selectedEngine}
-                />
-              </div>
-            )}
-
-            {/* 右键菜单 */}
-            {contextMenuPosition && (
-              <ContextMenu
-                position={contextMenuPosition}
-                onSettingsClick={() => {
-                  setIsSettingsOpen(true);
-                  closeContextMenu();
-                }}
-              />
-            )}
-            
-            {/* 设置对话框 */}
-            <SettingsDialog 
-              isOpen={isSettingsOpen} 
-              onOpenChange={setIsSettingsOpen}
-              initialAvatarUrl={avatarUrl}
-              hasSecretKey={hasSecretKey}
-              initialOpenInNewTab={openInNewTab}
-              initialLayoutMode={layoutMode}
-              initialIconStyle={iconStyle}
-              initialBackgroundUrl={backgroundUrl}
-              initialSidebarSettings={sidebarSettings}
-            />
-
-          </div>
-
-          {/* DragOverlay - 拖拽时显示的图标副本 */}
-          <DragOverlay>
-            {activeId ? (
-              <DragOverlayItem 
-                id={activeId}
-                pageGridItems={pageGridItems}
-                currentPageId={currentPageId}
-                dockItems={dockItems}
-                iconStyle={currentIconStyle}
-              />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </main>
-    </>
+    <HomeShell
+      title="新标签页"
+      backgroundUrl={currentBackgroundUrl}
+      onContextMenu={handleContextMenu}
+      dndContextProps={{
+        sensors,
+        collisionDetection: customCollisionDetection,
+        onDragStart: dragHandlers.onDragStart,
+        onDragOver: dragHandlers.onDragOver,
+        onDragEnd: dragHandlers.onDragEnd,
+      }}
+      overlays={{
+        contextMenuPosition,
+        onContextMenuSettings: () => setIsSettingsOpen(true),
+        onCloseContextMenu: closeContextMenu,
+        isSettingsOpen,
+        onSettingsOpenChange: setIsSettingsOpen,
+        avatarUrl,
+        hasSecretKey,
+        openInNewTab,
+        layoutMode,
+        iconStyle,
+        backgroundUrl,
+        sidebarSettings,
+        activeId,
+        pageGridItems,
+        currentPageId,
+        dockItems,
+        currentIconStyle,
+      }}
+    >
+      {currentLayoutMode === "component" && (
+        <ComponentLayout
+          avatarUrl={avatarUrl}
+          sidebarItems={sidebarItems}
+          openInNewTab={openInNewTab}
+          searchEngines={searchEngines}
+          selectedEngine={selectedEngine}
+          currentSidebarSettings={currentSidebarSettings}
+          isSidebarVisible={isSidebarVisible}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onPageChange={setCurrentPageId}
+          currentPageId={currentPageId}
+          onSidebarItemsChange={setCurrentSidebarItems}
+          currentSidebarItems={currentSidebarItems}
+          currentIconStyle={currentIconStyle}
+          pageGridItems={pageGridItems}
+          onPageGridItemsChange={async (newPageGridItems) => {
+            setPageGridItems(newPageGridItems);
+            try {
+              await fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  key: "page_grid_items",
+                  value: JSON.stringify(newPageGridItems),
+                }),
+              });
+              const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
+              await updateRemoteTimestamp("gridIcons");
+            } catch (error) {
+              console.error("Failed to save page grid items:", error);
+            }
+          }}
+          dockItems={dockItems}
+          onDockItemsChange={async (newDockItems) => {
+            setDockItems(newDockItems);
+            try {
+              await fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  key: "dock_items",
+                  value: JSON.stringify(newDockItems),
+                }),
+              });
+              const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
+              await updateRemoteTimestamp("dockIcons");
+            } catch (error) {
+              console.error("Failed to save dock items:", error);
+            }
+          }}
+        />
+      )}
+      {currentLayoutMode === "minimal" && (
+        <MinimalLayout
+          openInNewTab={openInNewTab}
+          searchEngines={searchEngines}
+          selectedEngine={selectedEngine}
+        />
+      )}
+    </HomeShell>
   );
 }
+
 
 // SSR - 服务端获取数据（与 UptimeFlare 对齐）
 export async function getServerSideProps() {
