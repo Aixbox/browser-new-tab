@@ -92,7 +92,7 @@ const DraggableDockItem = ({
     isDragging,
   } = useSortable({
     id: item.id,
-    transition: { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+    transition: { duration: 300, easing: "cubic-bezier(0.14, 1, 0.28, 1)" },
   });
 
 

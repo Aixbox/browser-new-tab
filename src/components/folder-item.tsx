@@ -99,11 +99,7 @@ const FolderIconItem = ({
     isDragging,
   } = useSortable({
     id: item.id,
-    transition: { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
-    animateLayoutChanges: ({ isSorting, wasDragging }) => {
-      if (isSorting && wasDragging) return false;
-      return true;
-    },
+    transition: { duration: 300, easing: "cubic-bezier(0.14, 1, 0.28, 1)" },
   });
 
 
@@ -248,14 +244,7 @@ export const FolderItemComponent = ({
     isDragging,
   } = useSortable({
     id: folder.id,
-    transition: { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
-    // 启用布局动画，但只在非拖动状态下
-    animateLayoutChanges: ({ isSorting, wasDragging }) => {
-      // 如果正在排序且之前在拖动，不动画（避免闪烁）
-      if (isSorting && wasDragging) return false;
-      // 其他情况启用动画
-      return true;
-    },
+    transition: { duration: 300, easing: "cubic-bezier(0.14, 1, 0.28, 1)" },
   });
 
   

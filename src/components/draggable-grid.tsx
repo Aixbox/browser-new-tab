@@ -102,16 +102,17 @@ const TextIcon = ({ text, color, size = 'small' }: { text: string; color: string
 
 
 // 可拖拽的图标项
-const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, onEdit }: { 
+const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, onEdit, isFolderPreviewTarget }: { 
   item: IconItem;
   openInNewTab: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; showName: boolean; nameSize: number; nameColor: string };
   nameMaxWidth: number;
   onDelete: (id: string) => void;
   onEdit: (item: IconItem) => void;
+  isFolderPreviewTarget: boolean;
 }) => {
-  const [showFolderPreview, setShowFolderPreview] = useState(false);
   const [wasJustDragging, setWasJustDragging] = useState(false);
+
   
   const {
     attributes,
@@ -122,14 +123,7 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
     isDragging,
   } = useSortable({
     id: item.id,
-    transition: { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
-    // 启用布局动画，但只在非拖动状态下
-    animateLayoutChanges: ({ isSorting, wasDragging }) => {
-      // 如果正在排序且之前在拖动，不动画（避免闪烁）
-      if (isSorting && wasDragging) return false;
-      // 其他情况启用动画
-      return true;
-    },
+    transition: { duration: 300, easing: "cubic-bezier(0.14, 1, 0.28, 1)" },
   });
 
 
@@ -146,18 +140,7 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
     }
   }, [isDragging, wasJustDragging]);
 
-  // 监听文件夹预览事件
-  useEffect(() => {
-    const handleFolderPreview = (e: CustomEvent) => {
-      const { targetId, inFolderMode } = e.detail;
-      setShowFolderPreview(inFolderMode && targetId === item.id);
-    };
-    
-    window.addEventListener('folderPreviewChange', handleFolderPreview as EventListener);
-    return () => window.removeEventListener('folderPreviewChange', handleFolderPreview as EventListener);
-  }, [item.id]);
 
-  // sortingModeChange handled at grid level
 
 
   const style = {
@@ -304,8 +287,9 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
       <div 
         className={cn(
           "transition-all duration-300",
-          showFolderPreview && "ring-4 ring-blue-400/80 rounded-xl scale-105"
+          isFolderPreviewTarget && "ring-4 ring-blue-400/80 rounded-xl scale-105"
         )}
+
         style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
       >
         {renderIcon()}
@@ -376,6 +360,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState<IconItem | null>(null);
+
   const [formData, setFormData] = useState({
     url: '',
     name: '',
@@ -392,6 +377,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const colorButtonRef = useRef<HTMLButtonElement>(null);
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
+
 
 
   // 让宫格区域成为 droppable
@@ -412,6 +398,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     window.addEventListener('openInNewTabChanged', handleSettingsChange as EventListener);
     return () => window.removeEventListener('openInNewTabChanged', handleSettingsChange as EventListener);
   }, []);
+
 
 
 
@@ -768,6 +755,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
                   nameMaxWidth={nameMaxWidth}
                   onDelete={handleDelete}
                   onEdit={handleEdit}
+                  isFolderPreviewTarget={false}
                 />
               );
             })}

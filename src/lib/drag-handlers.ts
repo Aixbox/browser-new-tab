@@ -1,6 +1,6 @@
 // 拖拽相关的处理逻辑
 import { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
-import { isInFolderCreationMode, resetHoverState } from "./collision-detection";
+import { isInFolderCreationMode, isInSortingMode, resetHoverState } from "./collision-detection";
 import { isFolder, isIcon, stripTempPreviews } from "@/lib/grid-model";
 import type { GridItem, IconItem, FolderItem } from "@/lib/grid-model";
 
@@ -45,6 +45,10 @@ export function createDragHandlers(
     }
 
     if (isInFolderCreationMode()) {
+      return;
+    }
+
+    if (!isInSortingMode()) {
       return;
     }
 

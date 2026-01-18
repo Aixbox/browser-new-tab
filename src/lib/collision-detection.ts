@@ -19,8 +19,9 @@ let hoverState: {
   timerId: null,
 };
 
-const EDGE_HOVER_DELAY = 500; // 外围悬停 500ms 触发排序
-const CENTER_HOVER_DELAY = 350; // 中心悬停 500ms 进入文件夹模式
+const EDGE_HOVER_DELAY = 180; // 外围悬停触发排序
+const CENTER_HOVER_DELAY = 350; // 中心悬停进入文件夹模式
+
 
 // 清除定时器
 function clearHoverTimer() {
@@ -122,29 +123,13 @@ export function createCustomCollisionDetection(
                   // 进入文件夹创建模式
                   hoverState.inFolderMode = true;
                   console.log('[Collision] ✅ Entered folder creation mode! (via timer)');
-                  
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('folderPreviewChange', { 
-                      detail: { targetId: targetCollision.id, inFolderMode: true } 
-                    }));
-                  }
                 } else {
                   // 进入排序模式
                   hoverState.inSortingMode = true;
                   console.log('[Collision] ✅ Entered sorting mode! (via timer)');
-                  
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('sortingModeChange', { 
-                      detail: { 
-                        activeId: active.id,
-                        targetId: targetCollision.id, 
-                        inSortingMode: true 
-                      } 
-                    }));
-                  }
                 }
               }, delay);
-              
+
             } else if (hoverState.isInCenter !== isInCenter) {
               // 位置改变（外围<->中心），重置计时器
               console.log('[Collision] Position changed to center:', isInCenter, 'resetting timer');
@@ -156,59 +141,41 @@ export function createCustomCollisionDetection(
               hoverState.isInCenter = isInCenter;
               
               // 如果从中心移到外围，退出文件夹模式
-              if (!isInCenter && hoverState.inFolderMode) {
-                hoverState.inFolderMode = false;
-                console.log('[Collision] Exited folder creation mode (moved to edge)');
-                
-                // 触发事件通知预览消失
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('folderPreviewChange', { 
-                    detail: { targetId: null, inFolderMode: false } 
-                  }));
-                }
-              }
-              
-              // 如果从外围移到中心，退出排序模式
-              if (isInCenter && hoverState.inSortingMode) {
-                hoverState.inSortingMode = false;
-                console.log('[Collision] Exited sorting mode (moved to center)');
-              }
-              
-              // 设置新的定时器
-              const delay = isInCenter ? CENTER_HOVER_DELAY : EDGE_HOVER_DELAY;
-              hoverState.timerId = setTimeout(() => {
-                if (isInCenter) {
-                  // 进入文件夹创建模式
-                  hoverState.inFolderMode = true;
-                  console.log('[Collision] ✅ Entered folder creation mode! (via timer)');
-                  
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('folderPreviewChange', { 
-                      detail: { targetId: targetCollision.id, inFolderMode: true } 
-                    }));
-                  }
-                } else {
-                  // 进入排序模式
-                  hoverState.inSortingMode = true;
-                  console.log('[Collision] ✅ Entered sorting mode! (via timer)');
-                  
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('sortingModeChange', { 
-                      detail: { 
-                        activeId: active.id,
-                        targetId: targetCollision.id, 
-                        inSortingMode: true 
-                      } 
-                    }));
-                  }
-                }
-              }, delay);
+               if (!isInCenter && hoverState.inFolderMode) {
+                 hoverState.inFolderMode = false;
+                 console.log('[Collision] Exited folder creation mode (moved to edge)');
+               }
+               
+               // 如果从外围移到中心，退出排序模式
+               if (isInCenter && hoverState.inSortingMode) {
+                 hoverState.inSortingMode = false;
+                 console.log('[Collision] Exited sorting mode (moved to center)');
+               }
+               
+               // 设置新的定时器
+               const delay = isInCenter ? CENTER_HOVER_DELAY : EDGE_HOVER_DELAY;
+               hoverState.timerId = setTimeout(() => {
+                 if (isInCenter) {
+                   // 进入文件夹创建模式
+                   hoverState.inFolderMode = true;
+                   console.log('[Collision] ✅ Entered folder creation mode! (via timer)');
+                 } else {
+                   // 进入排序模式
+                   hoverState.inSortingMode = true;
+                   console.log('[Collision] ✅ Entered sorting mode! (via timer)');
+                 }
+               }, delay);
+
             }
             
-            // 移除旧的基于 duration 的检查，现在完全依赖定时器
-            
-            // 始终返回碰撞结果，让 over 不为 undefined
-            return [targetCollision];
+            // 关键修改：只有在排序模式下才返回碰撞结果，否则返回空数组
+            // 这样 rectSortingStrategy 就不会触发排序
+            if (hoverState.inSortingMode) {
+              return [targetCollision];
+            } else {
+              // 不在排序模式，不返回碰撞，阻止自动排序
+              return [];
+            }
           }
           
           return [targetCollision];
@@ -216,8 +183,6 @@ export function createCustomCollisionDetection(
         
         // 重置悬停状态（离开所有图标）
         if (hoverState.itemId !== null) {
-          const wasInFolderMode = hoverState.inFolderMode;
-          const wasInSortingMode = hoverState.inSortingMode;
           console.log('[Collision] Left all icons, resetting state');
           
           // 清除定时器
@@ -231,20 +196,6 @@ export function createCustomCollisionDetection(
             inSortingMode: false,
             timerId: null,
           };
-          
-          // 如果之前在文件夹模式，触发事件通知预览消失
-          if (wasInFolderMode && typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('folderPreviewChange', { 
-              detail: { targetId: null, inFolderMode: false } 
-            }));
-          }
-          
-          // 如果之前在排序模式，触发事件通知退出排序
-          if (wasInSortingMode && typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('sortingModeChange', { 
-              detail: { activeId: null, targetId: null, inSortingMode: false } 
-            }));
-          }
         }
         
         // 如果没有重叠，使用 closestCenter
@@ -261,9 +212,14 @@ export function isInFolderCreationMode(): boolean {
   return hoverState.inFolderMode;
 }
 
-export function getCurrentHoverTarget(): string | null {
-  return hoverState.inFolderMode ? hoverState.itemId : null;
+export function isInSortingMode(): boolean {
+  return hoverState.inSortingMode;
 }
+
+export function getCurrentHoverTarget(): string | null {
+  return hoverState.itemId;
+}
+
 
 export function resetHoverState(): void {
   // 清除定时器
@@ -278,13 +234,5 @@ export function resetHoverState(): void {
     timerId: null,
   };
   
-  // 触发事件通知预览消失
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('folderPreviewChange', { 
-      detail: { targetId: null, inFolderMode: false } 
-    }));
-    window.dispatchEvent(new CustomEvent('sortingModeChange', { 
-      detail: { activeId: null, targetId: null, inSortingMode: false } 
-    }));
-  }
+
 }
