@@ -1,44 +1,16 @@
 // 拖拽相关的处理逻辑
 import { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
 import { isInFolderCreationMode, resetHoverState } from "./collision-detection";
+import { isFolder, isIcon, stripTempPreviews } from "@/lib/grid-model";
+import type { GridItem, IconItem, FolderItem } from "@/lib/grid-model";
 
-interface IconItem {
-  id: string;
-  name: string;
-  url: string;
-  iconType: 'logo' | 'image' | 'text';
-  iconLogo?: string;
-  iconImage?: string;
-  iconText?: string;
-  iconColor?: string;
-  _tempPreview?: boolean;
-}
-
-interface FolderItem {
-  id: string;
-  name: string;
-  type: 'folder';
-  items: IconItem[];
-  _tempPreview?: boolean;
-}
-
-type GridItem = IconItem | FolderItem;
-
-// 辅助函数：判断是否为文件夹
-const isFolder = (item: GridItem): item is FolderItem => {
-  return 'type' in item && item.type === 'folder';
-};
-
-// 辅助函数：判断是否为图标
-const isIcon = (item: GridItem): item is IconItem => {
-  return !isFolder(item);
-};
 
 export interface DragState {
   pageGridItems: Record<string, GridItem[]>;
   currentPageId: string;
-  dockItems: any[];
+  dockItems: IconItem[];
 }
+
 
 export interface DragHandlers {
   onDragStart: (event: DragStartEvent) => void;
@@ -53,7 +25,7 @@ export function createDragHandlers(
     setDragOverPageId: (id: string | null) => void;
     setCurrentPageId: (id: string) => void;
     setPageGridItems: (items: Record<string, GridItem[]>) => void;
-    setDockItems: (items: any[]) => void;
+    setDockItems: (items: IconItem[]) => void;
   },
   switchTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>
 ): DragHandlers {
@@ -62,93 +34,46 @@ export function createDragHandlers(
     const activeId = event.active.id as string;
     setState.setActiveId(activeId);
     resetHoverState();
-
-    // 从文件夹内拖拽时，先在网格中插入临时占位，支持实时排序动画
-    let draggedFromFolderItem: IconItem | null = null;
-    let sourcePageId: string | null = null;
-
-    for (const [pageId, items] of Object.entries(state.pageGridItems)) {
-      for (const item of items) {
-        if (isFolder(item)) {
-          const foundInFolder = item.items.find(folderItem => folderItem.id === activeId);
-          if (foundInFolder) {
-            draggedFromFolderItem = foundInFolder;
-            sourcePageId = pageId;
-            break;
-          }
-        }
-      }
-      if (draggedFromFolderItem) break;
-    }
-
-    if (draggedFromFolderItem && sourcePageId) {
-      const currentItems = state.pageGridItems[sourcePageId] || [];
-      const alreadyInGrid = currentItems.some(item => item.id === activeId);
-
-      if (!alreadyInGrid) {
-        const newPageGridItems = {
-          ...state.pageGridItems,
-          [sourcePageId]: [...currentItems, { ...draggedFromFolderItem, _tempPreview: true }]
-        };
-        setState.setPageGridItems(newPageGridItems);
-      }
-    }
   };
 
 
   const handleDragOver = (event: DragOverEvent) => {
     const { over, active } = event;
-    
+
+    if (!over || over.id === active.id) {
+      return;
+    }
+
+    if (isInFolderCreationMode()) {
+      return;
+    }
+
     // 清除之前的定时器
     if (switchTimeoutRef.current) {
       clearTimeout(switchTimeoutRef.current);
       switchTimeoutRef.current = null;
     }
-    
+
     // 侧边栏按钮悬浮切换页面
-    if (over?.id && typeof over.id === 'string' && over.id.startsWith('sidebar-button-')) {
-      const pageId = over.id.replace('sidebar-button-', '');
-      
+    if (typeof over.id === "string" && over.id.startsWith("sidebar-button-")) {
+      const pageId = over.id.replace("sidebar-button-", "");
+
       if (pageId !== state.currentPageId) {
         setState.setDragOverPageId(pageId);
-        
+
         switchTimeoutRef.current = setTimeout(() => {
           setState.setCurrentPageId(pageId);
           setState.setDragOverPageId(null);
         }, 150);
       }
-      
+
       return;
     } else {
       setState.setDragOverPageId(null);
     }
-    
-    // 跨页面拖拽预览（只在非文件夹创建模式下）
-    if (!isInFolderCreationMode() && active && over?.id && !over.id.toString().startsWith('sidebar-button-') && over.id !== 'dock-droppable') {
-      const currentItems = state.pageGridItems[state.currentPageId] || [];
-      const isInCurrentPage = currentItems.some(item => item.id === active.id);
-      
-      if (!isInCurrentPage) {
-        let draggedItem: any = null;
-        for (const items of Object.values(state.pageGridItems)) {
-          const found = items.find(item => item.id === active.id);
-          if (found) {
-            draggedItem = found;
-            break;
-          }
-        }
-        if (!draggedItem) {
-          draggedItem = state.dockItems.find(item => item.id === active.id);
-        }
-        
-        if (draggedItem) {
-          const newPageGridItems = {
-            ...state.pageGridItems,
-            [state.currentPageId]: [...currentItems, { ...draggedItem, _tempPreview: true }]
-          };
-          setState.setPageGridItems(newPageGridItems);
-        }
-      }
+
+    if (over.id === "dock-droppable" || over.id === "grid-droppable") {
+      return;
     }
   };
 
@@ -164,17 +89,13 @@ export function createDragHandlers(
     
     // 通知文件夹对话框拖动已结束
     window.dispatchEvent(new CustomEvent('folderDragEnd'));
-    
     const wasInFolderMode = isInFolderCreationMode();
     resetHoverState();
 
+
+
     // 清理临时预览
-    const cleanPageGridItems = Object.fromEntries(
-      Object.entries(state.pageGridItems).map(([pageId, items]) => [
-        pageId,
-        items.filter(item => !('_tempPreview' in item && item._tempPreview))
-      ])
-    );
+    const cleanPageGridItems = stripTempPreviews(state.pageGridItems);
 
     // 查找拖拽源
     let draggedFromGrid: GridItem | null = null;
@@ -203,7 +124,8 @@ export function createDragHandlers(
       }
     }
     
-    const draggedFromDock = state.dockItems.find(item => item.id === active.id);
+    const draggedFromDock = state.dockItems.find(item => item.id === active.id) || null;
+
 
     // 如果从文件夹拖出且没有拖到任何目标（拖到背景），从文件夹移除
     if (draggedFromFolder && !over) {
@@ -329,7 +251,7 @@ export function createDragHandlers(
     // 拖到 Dock
     if (over?.id === 'dock-droppable' && (currentDraggedFromGrid || draggedFromGrid)) {
       const itemToMove = currentDraggedFromGrid || draggedFromGrid;
-      if (itemToMove) {
+      if (itemToMove && isIcon(itemToMove)) {
         await handleDropToDock(
           active.id as string,
           itemToMove,
@@ -341,6 +263,7 @@ export function createDragHandlers(
       }
       return;
     }
+
 
     // 从 Dock 拖出
     if (draggedFromDock) {
@@ -484,7 +407,7 @@ async function handleDropToSidebarButton(
   targetPageId: string,
   draggedFromGrid: GridItem | null,
   sourcePageId: string | null,
-  draggedFromDock: any,
+  draggedFromDock: IconItem | null,
   cleanPageGridItems: Record<string, GridItem[]>,
   state: DragState,
   setState: any
@@ -524,7 +447,7 @@ async function handleDropToSidebarButton(
 
 async function handleDropToDock(
   activeId: string,
-  itemToMove: GridItem,
+  itemToMove: IconItem,
   fromPageId: string | null,
   cleanPageGridItems: Record<string, GridItem[]>,
   state: DragState,
@@ -561,10 +484,11 @@ async function handleDropToDock(
   }
 }
 
+
 async function handleDragFromDock(
   activeId: string,
   over: any,
-  draggedFromDock: any,
+  draggedFromDock: IconItem,
   cleanPageGridItems: Record<string, GridItem[]>,
   currentGridItems: GridItem[],
   state: DragState,
@@ -578,19 +502,20 @@ async function handleDragFromDock(
     const newPageGridItems = { ...cleanPageGridItems, [state.currentPageId]: newCurrentItems };
     
     setState.setPageGridItems(newPageGridItems);
-    setState.setDockItems((prevDockItems: any[]) => 
-      prevDockItems.filter(item => item.id !== activeId)
+    setState.setDockItems(
+      state.dockItems.filter(item => item.id !== activeId)
     );
-    
+
     await savePageGridItems(newPageGridItems);
     return;
   }
 
   if (over?.id !== 'dock-droppable') {
     // 拖到宫格
-    const overItemIndex = currentGridItems.findIndex(item => item.id === over?.id && !item._tempPreview);
+    const overItemIndex = currentGridItems.findIndex(item => item.id === over?.id);
+
     let newPageGridItems = { ...cleanPageGridItems };
-    
+
     if (overItemIndex !== -1) {
       // 插入到指定位置
       const newCurrentItems = [...currentGridItems];
@@ -601,14 +526,18 @@ async function handleDragFromDock(
       const newCurrentItems = [...currentGridItems, draggedFromDock];
       newPageGridItems[state.currentPageId] = newCurrentItems;
     }
-    
-    setState.setDockItems((prevDockItems: any[]) => 
-      prevDockItems.filter(item => item.id !== activeId)
+
+    setState.setDockItems(
+      state.dockItems.filter(item => item.id !== activeId)
     );
+
     setState.setPageGridItems(newPageGridItems);
-    
+
     await savePageGridItems(newPageGridItems);
   }
+
+
+
 }
 
 async function handleCrossPageDrag(
@@ -621,7 +550,8 @@ async function handleCrossPageDrag(
   state: DragState,
   setState: any
 ) {
-  const overItemIndex = currentGridItems.findIndex(item => item.id === over?.id && !item._tempPreview);
+  const overItemIndex = currentGridItems.findIndex(item => item.id === over?.id);
+
   let newPageGridItems = { ...cleanPageGridItems };
   
   // 从源页面移除

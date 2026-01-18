@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { KVNamespace } from "@cloudflare/workers-types";
 import { PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { ComponentLayout, HomeShell, MinimalLayout } from "@/components/home";
@@ -11,10 +11,14 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { usePageWheelSwitch } from "@/hooks/use-page-wheel-switch";
 import { usePreloadAssets } from "@/hooks/use-preload-assets";
-import { useSortingMode } from "@/hooks/use-sorting-mode";
+
 import { useSyncListeners } from "@/hooks/use-sync-listeners";
 import { createDragHandlers } from "@/lib/drag-handlers";
 import { createCustomCollisionDetection } from "@/lib/collision-detection";
+import { useGridStore } from "@/lib/grid-store";
+import builtinIcons from "@/json/index";
+import type { DockItem, GridItem } from "@/lib/grid-model";
+
 
 
 // 使用 Edge Runtime（与 UptimeFlare 对齐）
@@ -31,8 +35,9 @@ interface HomeProps {
   iconStyle: IconStyleSettings;
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
-  iconItems: any[] | null;
-  dockItems: any[] | null;
+  iconItems: GridItem[] | null;
+  dockItems: GridItem[] | null;
+
   searchEngines: any[] | null;
   selectedEngine: string | null;
 }
@@ -51,14 +56,10 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     setCurrentSidebarSettings,
     isSidebarVisible,
     setIsSidebarVisible,
-    dockItems,
-    setDockItems,
     currentSidebarItems,
     setCurrentSidebarItems,
     currentPageId,
     setCurrentPageId,
-    activeId,
-    setActiveId,
     dragOverPageId,
     setDragOverPageId,
   } = useHomeState({
@@ -67,55 +68,40 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     backgroundUrl,
     sidebarSettings,
     sidebarItems,
-    dockItems: initialDockItems,
   });
 
-  const [pageGridItems, setPageGridItems] = useState<Record<string, any[]>>(() => {
+  const {
+    pageGridItems,
+    dockItems,
+    activeId,
+    setPageGridItems,
+    setDockItems,
+    setActiveId,
+    initialize,
+  } = useGridStore();
+
+  const baseTime = useMemo(() => Date.now(), []);
+  const initialPageGridItems = useMemo<Record<string, GridItem[]>>(() => {
     const firstPageId = sidebarItems?.[0]?.id || "1";
 
-    const testSites = [
-      { name: "Bilibili", url: "https://www.bilibili.com/", icon: "https://www.bilibili.com/favicon.ico" },
-      { name: "GitHub", url: "https://github.com/", icon: "https://github.com/favicon.ico" },
-      { name: "Google", url: "https://www.google.com/", icon: "https://www.google.com/favicon.ico" },
-      { name: "YouTube", url: "https://www.youtube.com/", icon: "https://www.youtube.com/favicon.ico" },
-      { name: "Twitter", url: "https://twitter.com/", icon: "https://twitter.com/favicon.ico" },
-      { name: "Reddit", url: "https://www.reddit.com/", icon: "https://www.reddit.com/favicon.ico" },
-      { name: "Stack Overflow", url: "https://stackoverflow.com/", icon: "https://stackoverflow.com/favicon.ico" },
-      { name: "MDN", url: "https://developer.mozilla.org/", icon: "https://developer.mozilla.org/favicon.ico" },
-      { name: "Wikipedia", url: "https://www.wikipedia.org/", icon: "https://www.wikipedia.org/favicon.ico" },
-      { name: "Amazon", url: "https://www.amazon.com/", icon: "https://www.amazon.com/favicon.ico" },
-      { name: "Netflix", url: "https://www.netflix.com/", icon: "https://www.netflix.com/favicon.ico" },
-      { name: "Spotify", url: "https://www.spotify.com/", icon: "https://www.spotify.com/favicon.ico" },
-      { name: "Discord", url: "https://discord.com/", icon: "https://discord.com/favicon.ico" },
-      { name: "Twitch", url: "https://www.twitch.tv/", icon: "https://www.twitch.tv/favicon.ico" },
-      { name: "LinkedIn", url: "https://www.linkedin.com/", icon: "https://www.linkedin.com/favicon.ico" },
-      { name: "Instagram", url: "https://www.instagram.com/", icon: "https://www.instagram.com/favicon.ico" },
-      { name: "Facebook", url: "https://www.facebook.com/", icon: "https://www.facebook.com/favicon.ico" },
-      { name: "TikTok", url: "https://www.tiktok.com/", icon: "https://www.tiktok.com/favicon.ico" },
-      { name: "Zhihu", url: "https://www.zhihu.com/", icon: "https://www.zhihu.com/favicon.ico" },
-      { name: "Weibo", url: "https://weibo.com/", icon: "https://weibo.com/favicon.ico" },
-      { name: "Taobao", url: "https://www.taobao.com/", icon: "https://www.taobao.com/favicon.ico" },
-      { name: "JD", url: "https://www.jd.com/", icon: "https://www.jd.com/favicon.ico" },
-      { name: "Baidu", url: "https://www.baidu.com/", icon: "https://www.baidu.com/favicon.ico" },
-      { name: "Douban", url: "https://www.douban.com/", icon: "https://www.douban.com/favicon.ico" },
-      { name: "Dribbble", url: "https://dribbble.com/", icon: "https://dribbble.com/favicon.ico" },
-      { name: "Behance", url: "https://www.behance.net/", icon: "https://www.behance.net/favicon.ico" },
-      { name: "Medium", url: "https://medium.com/", icon: "https://medium.com/favicon.ico" },
-      { name: "Dev.to", url: "https://dev.to/", icon: "https://dev.to/favicon.ico" },
-      { name: "Hacker News", url: "https://news.ycombinator.com/", icon: "https://news.ycombinator.com/favicon.ico" },
-      { name: "Product Hunt", url: "https://www.producthunt.com/", icon: "https://www.producthunt.com/favicon.ico" },
-    ];
+    if (iconItems && iconItems.length > 0) {
+      return { [firstPageId]: iconItems as GridItem[] };
+    }
 
-    const testIcons = testSites.map((site, i) => ({
-      id: `test-icon-${Date.now()}-${i}`,
-      name: site.name,
-      url: site.url,
-      iconType: "logo" as const,
-      iconLogo: site.icon,
+    const fallbackIcons: GridItem[] = builtinIcons.map((item, index) => ({
+      ...item,
+      iconType: item.iconType as "logo" | "image" | "text",
+      id: `${item.id}-${baseTime}-${index}`,
     }));
 
-    return { [firstPageId]: testIcons };
-  });
+    return { [firstPageId]: fallbackIcons };
+  }, [baseTime, iconItems, sidebarItems]);
+
+  useEffect(() => {
+    if (Object.keys(pageGridItems).length === 0) {
+      initialize(initialPageGridItems, (initialDockItems as DockItem[] | null) || []);
+    }
+  }, [initialize, initialDockItems, initialPageGridItems, pageGridItems]);
 
   const switchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -147,11 +133,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     console.log("[Animation] Direction changed to:", animationDirection, "Page:", currentPageId);
   }, [animationDirection, currentPageId]);
 
-  useSortingMode({
-    pageGridItems,
-    currentPageId,
-    setPageGridItems,
-  });
+
 
   useSyncListeners({
     avatarUrl,

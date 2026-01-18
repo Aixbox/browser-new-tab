@@ -1,33 +1,34 @@
 // DragOverlay 中显示的图标组件
 import type { IconStyleSettings } from "@/components/icon-settings";
+import type { DockItem, GridItem } from "@/lib/grid-model";
+import { isFolder, isIcon } from "@/lib/grid-model";
 
 interface DragOverlayItemProps {
   id: string;
-  pageGridItems: Record<string, any[]>;
+  pageGridItems: Record<string, GridItem[]>;
   currentPageId: string;
-  dockItems: any[];
+  dockItems: DockItem[];
   iconStyle: IconStyleSettings;
 }
+
 
 export function DragOverlayItem({ 
   id, 
   pageGridItems,
   currentPageId,
-  dockItems, 
-  iconStyle 
+  dockItems,
+  iconStyle
 }: DragOverlayItemProps) {
+
   // 先在顶层查找
-  const allItems = [
-    ...Object.values(pageGridItems).flat(),
-    ...dockItems
-  ];
-  let item = allItems.find(i => i.id === id);
-  
+  const allItems = [...Object.values(pageGridItems).flat(), ...dockItems];
+  let item = allItems.find((candidate) => candidate.id === id) || null;
+
   // 如果没找到，在文件夹内部查找
   if (!item) {
     for (const pageItem of allItems) {
-      if (pageItem.type === 'folder' && pageItem.items) {
-        const foundInFolder = pageItem.items.find((folderItem: any) => folderItem.id === id);
+      if (isFolder(pageItem)) {
+        const foundInFolder = pageItem.items.find((folderItem) => folderItem.id === id);
         if (foundInFolder) {
           item = foundInFolder;
           break;
@@ -35,8 +36,9 @@ export function DragOverlayItem({
       }
     }
   }
-  
-  if (!item) return null;
+
+  if (!item || !isIcon(item)) return null;
+
 
   const iconSize = iconStyle?.size || 80;
   const borderRadius = iconStyle?.borderRadius || 12;
@@ -100,8 +102,9 @@ export function DragOverlayItem({
   };
 
   return (
-    <div className="cursor-grabbing">
+    <div className="cursor-grabbing" style={{ transform: "scale(1.03)", filter: "drop-shadow(0 12px 24px rgba(0,0,0,0.35))" }}>
       {renderIcon()}
     </div>
   );
+
 }

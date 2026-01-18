@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { HOME_EVENTS } from "@/lib/home-events";
+import type { GridItem } from "@/lib/grid-model";
 
-type PageGridItems = Record<string, any[]>;
+type PageGridItems = Record<string, GridItem[]>;
 
 type SortingModeEvent = CustomEvent<{
   activeId?: string;
@@ -39,8 +40,9 @@ export const useSortingMode = ({
         console.log("[Index] Sorting mode activated, reordering:", activeId, "→", targetId);
 
         const currentItems = pageGridItems[currentPageId] || [];
-        const oldIndex = currentItems.findIndex((item: any) => item.id === activeId);
-        const newIndex = currentItems.findIndex((item: any) => item.id === targetId);
+        const oldIndex = currentItems.findIndex((item) => item.id === activeId);
+        const newIndex = currentItems.findIndex((item) => item.id === targetId);
+
 
         console.log(
           "[Index] oldIndex:",

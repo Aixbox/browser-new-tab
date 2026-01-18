@@ -2,14 +2,17 @@ import { motion } from "framer-motion";
 import { DraggableGrid } from "@/components/draggable-grid";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
+import type { GridItem } from "@/lib/grid-model";
+
 
 interface PageGridCarouselProps {
   currentSidebarItems: SidebarItem[];
   currentPageId: string;
   currentIconStyle: IconStyleSettings;
   openInNewTab: boolean;
-  pageGridItems: Record<string, any[]>;
-  onItemsChange: (newPageGridItems: Record<string, any[]>) => void | Promise<void>;
+  pageGridItems: Record<string, GridItem[]>;
+  onItemsChange: (newPageGridItems: Record<string, GridItem[]>) => void | Promise<void>;
+
 }
 
 export const PageGridCarousel = ({

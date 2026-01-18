@@ -1,28 +1,30 @@
 import { useEffect } from "react";
 import { imageCache } from "@/lib/image-cache";
+import type { GridItem } from "@/lib/grid-model";
 
-type PageGridItems = Record<string, any[]>;
+type PageGridItems = Record<string, GridItem[]>;
 
 interface PreloadAssetsOptions {
   pageGridItems: PageGridItems;
-  dockItems: any[];
+  dockItems: GridItem[];
   avatarUrl: string | null;
 }
+
 
 export const usePreloadAssets = ({ pageGridItems, dockItems, avatarUrl }: PreloadAssetsOptions) => {
   useEffect(() => {
     const imagesToPreload: string[] = [];
 
-    Object.values(pageGridItems).forEach((items: any[]) => {
-      items.forEach((item: any) => {
-        if (item.iconLogo) imagesToPreload.push(item.iconLogo);
-        if (item.iconImage) imagesToPreload.push(item.iconImage);
+    Object.values(pageGridItems).forEach((items) => {
+      items.forEach((item) => {
+        if ("iconLogo" in item && item.iconLogo) imagesToPreload.push(item.iconLogo);
+        if ("iconImage" in item && item.iconImage) imagesToPreload.push(item.iconImage);
       });
     });
 
-    dockItems.forEach((item: any) => {
-      if (item.iconLogo) imagesToPreload.push(item.iconLogo);
-      if (item.iconImage) imagesToPreload.push(item.iconImage);
+    dockItems.forEach((item) => {
+      if ("iconLogo" in item && item.iconLogo) imagesToPreload.push(item.iconLogo);
+      if ("iconImage" in item && item.iconImage) imagesToPreload.push(item.iconImage);
     });
 
     if (avatarUrl) imagesToPreload.push(avatarUrl);

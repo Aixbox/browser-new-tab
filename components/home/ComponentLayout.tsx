@@ -6,6 +6,8 @@ import { PageGridCarousel } from "@/components/home/PageGridCarousel";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
+import type { DockItem, GridItem } from "@/lib/grid-model";
+
 
 interface ComponentLayoutProps {
   avatarUrl: string | null;
@@ -21,10 +23,11 @@ interface ComponentLayoutProps {
   onSidebarItemsChange: (items: SidebarItem[]) => void;
   currentSidebarItems: SidebarItem[];
   currentIconStyle: IconStyleSettings;
-  pageGridItems: Record<string, any[]>;
-  onPageGridItemsChange: (newPageGridItems: Record<string, any[]>) => void | Promise<void>;
-  dockItems: any[];
-  onDockItemsChange: (newDockItems: any[]) => void | Promise<void>;
+  pageGridItems: Record<string, GridItem[]>;
+  onPageGridItemsChange: (newPageGridItems: Record<string, GridItem[]>) => void | Promise<void>;
+  dockItems: DockItem[];
+  onDockItemsChange: (newDockItems: DockItem[]) => void | Promise<void>;
+
 }
 
 export const ComponentLayout = ({

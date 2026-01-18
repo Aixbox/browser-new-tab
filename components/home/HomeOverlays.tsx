@@ -6,6 +6,8 @@ import { DragOverlayItem } from "@/components/drag-overlay-item";
 import { SettingsDialog } from "@/components/settings-drawer";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
+import type { DockItem, GridItem } from "@/lib/grid-model";
+
 
 interface HomeOverlaysProps {
   contextMenuPosition: { x: number; y: number } | null;
@@ -21,10 +23,11 @@ interface HomeOverlaysProps {
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
   activeId: string | null;
-  pageGridItems: Record<string, any[]>;
+  pageGridItems: Record<string, GridItem[]>;
   currentPageId: string;
-  dockItems: any[];
+  dockItems: DockItem[];
   currentIconStyle: IconStyleSettings;
+
 }
 
 export const HomeOverlays = ({

@@ -1,28 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSortable, SortableContext } from "@dnd-kit/sortable";
+import { rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import type { FolderItem, IconItem } from "@/lib/grid-model";
 import * as Portal from "@radix-ui/react-portal";
 
-interface IconItem {
-  id: string;
-  name: string;
-  url: string;
-  iconType: 'logo' | 'image' | 'text';
-  iconLogo?: string;
-  iconImage?: string;
-  iconText?: string;
-  iconColor?: string;
-}
-
-interface FolderItem {
-  id: string;
-  name: string;
-  type: 'folder';
-  items: IconItem[];
-}
 
 interface FolderItemProps {
   folder: FolderItem;
@@ -113,13 +97,15 @@ const FolderIconItem = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ 
+  } = useSortable({
     id: item.id,
+    transition: { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
     animateLayoutChanges: ({ isSorting, wasDragging }) => {
       if (isSorting && wasDragging) return false;
       return true;
     },
   });
+
 
   // 当 isDragging 变为 true 时调用 onDragStart（延迟触发避免误触）
   useEffect(() => {
@@ -147,22 +133,15 @@ const FolderIconItem = ({
   };
 
   return (
-    <motion.div
-      layout
+    <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
       className="relative cursor-grab active:cursor-grabbing"
       onClickCapture={handleClick}
-      transition={{
-        layout: {
-          type: "spring",
-          stiffness: 350,
-          damping: 30
-        }
-      }}
     >
+
       <div 
         className="rounded-lg overflow-hidden flex items-center justify-center"
         style={{
@@ -203,9 +182,10 @@ const FolderIconItem = ({
           {item.name}
         </p>
       )}
-    </motion.div>
+    </div>
   );
 };
+
 
 export const FolderItemComponent = ({
   folder,
@@ -222,6 +202,7 @@ export const FolderItemComponent = ({
   const [isDraggingFromFolder, setIsDraggingFromFolder] = useState(false);
   const [dragOverBackground, setDragOverBackground] = useState(false);
   const dragOverTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   
   // 同步 folder.items 的变化
   useEffect(() => {
@@ -255,6 +236,8 @@ export const FolderItemComponent = ({
       }
     };
   }, [isDraggingFromFolder]);
+
+
   
   const {
     attributes,
@@ -263,8 +246,9 @@ export const FolderItemComponent = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ 
+  } = useSortable({
     id: folder.id,
+    transition: { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
     // 启用布局动画，但只在非拖动状态下
     animateLayoutChanges: ({ isSorting, wasDragging }) => {
       // 如果正在排序且之前在拖动，不动画（避免闪烁）
@@ -273,13 +257,15 @@ export const FolderItemComponent = ({
       return true;
     },
   });
+
   
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0 : 1,
     cursor: 'pointer',
   } as React.CSSProperties;
+
 
   const iconSize = iconStyle?.size || 80;
   const showName = iconStyle?.showName ?? true;
@@ -400,6 +386,7 @@ export const FolderItemComponent = ({
               <h2 className="text-2xl font-semibold text-white drop-shadow-lg">{folder.name}</h2>
             </motion.div>
 
+
             {/* 对话框 - 拖动时隐藏但保持挂载 */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -416,7 +403,7 @@ export const FolderItemComponent = ({
             >
               {/* 图标网格 */}
               <div className="p-6 overflow-y-auto max-h-[80vh]">
-                <SortableContext items={folderItems.map(item => item.id)} strategy={() => null}>
+                <SortableContext items={folderItems.map((item) => item.id)} strategy={rectSortingStrategy}>
                   <div 
                     className="grid w-full"
                     style={{

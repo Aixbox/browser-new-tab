@@ -7,8 +7,10 @@ import { useSortable, SortableContext, rectSortingStrategy } from "@dnd-kit/sort
 import { CSS } from "@dnd-kit/utilities";
 import { GlobeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
+import type { DockItem } from "@/lib/grid-model";
 
 // 图标加载组件
+
 const IconImage = ({ src, alt, className, style }: { 
   src: string; 
   alt: string; 
@@ -48,16 +50,7 @@ const IconImage = ({ src, alt, className, style }: {
   );
 };
 
-interface DockItem {
-  id: string;
-  name: string;
-  url: string;
-  iconType: 'logo' | 'image' | 'text';
-  iconLogo?: string;
-  iconImage?: string;
-  iconText?: string;
-  iconColor?: string;
-}
+
 
 interface DockProps {
   items: DockItem[];
@@ -97,12 +90,16 @@ const DraggableDockItem = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id });
+  } = useSortable({
+    id: item.id,
+    transition: { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+  });
+
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0 : 1, // 拖拽时完全隐藏
+    opacity: isDragging ? 0 : 1,
   };
 
   const iconStyle_css = {
