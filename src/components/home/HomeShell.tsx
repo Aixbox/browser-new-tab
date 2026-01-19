@@ -6,7 +6,7 @@ import { Background } from "@/components/background";
 import { HomeOverlays } from "@/components/home/HomeOverlays";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
-import type { DockItem, GridItem } from "@/lib/grid-model";
+import type { GridItem } from "@/lib/grid-model";
 
 
 interface HomeShellProps {
@@ -29,11 +29,8 @@ interface HomeShellProps {
     backgroundUrl: string | null;
     sidebarSettings: SidebarSettings;
     activeId: string | null;
-    pageGridItems: Record<string, GridItem[]>;
-    currentPageId: string;
-    dockItems: DockItem[];
+    gridItems: GridItem[];  // 简化：移除多页面结构
     currentIconStyle: IconStyleSettings;
-
   };
 }
 

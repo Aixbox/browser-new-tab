@@ -1,34 +1,29 @@
 // DragOverlay 中显示的图标组件
 import type { IconStyleSettings } from "@/components/icon-settings";
-import type { DockItem, GridItem } from "@/lib/grid-model";
+import type { GridItem } from "@/lib/grid-model";
 import { isFolder, isIcon } from "@/lib/grid-model";
 
 interface DragOverlayItemProps {
   id: string;
-  pageGridItems: Record<string, GridItem[]>;
-  currentPageId: string;
-  dockItems: DockItem[];
+  gridItems: GridItem[];  // 简化：移除多页面结构
   iconStyle: IconStyleSettings;
 }
 
 
 export function DragOverlayItem({ 
   id, 
-  pageGridItems,
-  currentPageId,
-  dockItems,
+  gridItems,
   iconStyle
 }: DragOverlayItemProps) {
 
   // 先在顶层查找
-  const allItems = [...Object.values(pageGridItems).flat(), ...dockItems];
-  let item = allItems.find((candidate) => candidate.id === id) || null;
+  let item = gridItems.find((candidate) => candidate.id === id) || null;
 
   // 如果没找到，在文件夹内部查找
   if (!item) {
-    for (const pageItem of allItems) {
-      if (isFolder(pageItem)) {
-        const foundInFolder = pageItem.items.find((folderItem) => folderItem.id === id);
+    for (const gridItem of gridItems) {
+      if (isFolder(gridItem)) {
+        const foundInFolder = gridItem.items.find((folderItem) => folderItem.id === id);
         if (foundInFolder) {
           item = foundInFolder;
           break;

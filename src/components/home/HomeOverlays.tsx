@@ -1,14 +1,14 @@
 "use client";
 
-import { DragOverlay } from "@dnd-kit/core";
+import { DragOverlay, defaultDropAnimation } from "@dnd-kit/core";
 import { ContextMenu } from "@/components/context-menu";
 import { DragOverlayItem } from "@/components/drag-overlay-item";
 import { SettingsDialog } from "@/components/settings-drawer";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
-import type { DockItem, GridItem } from "@/lib/grid-model";
+import type { GridItem } from "@/lib/grid-model";
 
-
+// 简化：移除多页面结构和 Dock
 interface HomeOverlaysProps {
   contextMenuPosition: { x: number; y: number } | null;
   onContextMenuSettings: () => void;
@@ -23,11 +23,8 @@ interface HomeOverlaysProps {
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
   activeId: string | null;
-  pageGridItems: Record<string, GridItem[]>;
-  currentPageId: string;
-  dockItems: DockItem[];
+  gridItems: GridItem[];  // 简化：移除多页面结构
   currentIconStyle: IconStyleSettings;
-
 }
 
 export const HomeOverlays = ({
@@ -44,9 +41,7 @@ export const HomeOverlays = ({
   backgroundUrl,
   sidebarSettings,
   activeId,
-  pageGridItems,
-  currentPageId,
-  dockItems,
+  gridItems,
   currentIconStyle,
 }: HomeOverlaysProps) => {
   return (
@@ -71,13 +66,17 @@ export const HomeOverlays = ({
         initialBackgroundUrl={backgroundUrl}
         initialSidebarSettings={sidebarSettings}
       />
-      <DragOverlay>
+      <DragOverlay
+        dropAnimation={{
+          ...defaultDropAnimation,
+          duration: 750 / 2,  // ANIMATION_DURATION_MS / 2，和官方示例一致
+          dragSourceOpacity: 0,
+        }}
+      >
         {activeId ? (
           <DragOverlayItem
             id={activeId}
-            pageGridItems={pageGridItems}
-            currentPageId={currentPageId}
-            dockItems={dockItems}
+            gridItems={gridItems}
             iconStyle={currentIconStyle}
           />
         ) : null}

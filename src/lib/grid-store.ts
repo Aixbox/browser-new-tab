@@ -1,22 +1,24 @@
 import { create } from "zustand";
-import type { DockItem, GridItem } from "@/lib/grid-model";
+import { shallow } from "zustand/shallow";
+import type { GridItem } from "@/lib/grid-model";
 
 interface GridStoreState {
-  pageGridItems: Record<string, GridItem[]>;
-  dockItems: DockItem[];
+  gridItems: GridItem[];  // 简化：移除多页面结构
   activeId: string | null;
-  setPageGridItems: (items: Record<string, GridItem[]>) => void;
-  setDockItems: (items: DockItem[]) => void;
+  setGridItems: (items: GridItem[] | ((prev: GridItem[]) => GridItem[])) => void;
   setActiveId: (id: string | null) => void;
-  initialize: (pageGridItems: Record<string, GridItem[]>, dockItems?: DockItem[]) => void;
+  initialize: (gridItems: GridItem[]) => void;
 }
 
 export const useGridStore = create<GridStoreState>((set) => ({
-  pageGridItems: {},
-  dockItems: [],
+  gridItems: [],
   activeId: null,
-  setPageGridItems: (items) => set({ pageGridItems: items }),
-  setDockItems: (items) => set({ dockItems: items }),
+  setGridItems: (items) => set((state) => {
+    const newItems = typeof items === 'function' ? items(state.gridItems) : items;
+    // 如果数组引用相同，不触发更新
+    if (newItems === state.gridItems) return state;
+    return { gridItems: newItems };
+  }),
   setActiveId: (id) => set({ activeId: id }),
-  initialize: (pageGridItems, dockItems = []) => set({ pageGridItems, dockItems }),
+  initialize: (gridItems) => set({ gridItems }),
 }));

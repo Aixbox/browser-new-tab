@@ -2,27 +2,18 @@ import { useEffect } from "react";
 import { imageCache } from "@/lib/image-cache";
 import type { GridItem } from "@/lib/grid-model";
 
-type PageGridItems = Record<string, GridItem[]>;
-
+// 简化：移除多页面结构和 Dock
 interface PreloadAssetsOptions {
-  pageGridItems: PageGridItems;
-  dockItems: GridItem[];
+  gridItems: GridItem[];
   avatarUrl: string | null;
 }
 
 
-export const usePreloadAssets = ({ pageGridItems, dockItems, avatarUrl }: PreloadAssetsOptions) => {
+export const usePreloadAssets = ({ gridItems, avatarUrl }: PreloadAssetsOptions) => {
   useEffect(() => {
     const imagesToPreload: string[] = [];
 
-    Object.values(pageGridItems).forEach((items) => {
-      items.forEach((item) => {
-        if ("iconLogo" in item && item.iconLogo) imagesToPreload.push(item.iconLogo);
-        if ("iconImage" in item && item.iconImage) imagesToPreload.push(item.iconImage);
-      });
-    });
-
-    dockItems.forEach((item) => {
+    gridItems.forEach((item) => {
       if ("iconLogo" in item && item.iconLogo) imagesToPreload.push(item.iconLogo);
       if ("iconImage" in item && item.iconImage) imagesToPreload.push(item.iconImage);
     });
@@ -32,5 +23,5 @@ export const usePreloadAssets = ({ pageGridItems, dockItems, avatarUrl }: Preloa
     if (imagesToPreload.length > 0) {
       imageCache.preloadBatch(imagesToPreload);
     }
-  }, [pageGridItems, dockItems, avatarUrl]);
+  }, [gridItems, avatarUrl]);
 };

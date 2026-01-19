@@ -23,11 +23,8 @@ interface ComponentLayoutProps {
   onSidebarItemsChange: (items: SidebarItem[]) => void;
   currentSidebarItems: SidebarItem[];
   currentIconStyle: IconStyleSettings;
-  pageGridItems: Record<string, GridItem[]>;
-  onPageGridItemsChange: (newPageGridItems: Record<string, GridItem[]>) => void | Promise<void>;
-  dockItems: DockItem[];
-  onDockItemsChange: (newDockItems: DockItem[]) => void | Promise<void>;
-
+  gridItems: GridItem[];  // 简化：移除多页面结构
+  onGridItemsChange: (newGridItems: GridItem[]) => void | Promise<void>;
 }
 
 export const ComponentLayout = ({
@@ -44,10 +41,8 @@ export const ComponentLayout = ({
   onSidebarItemsChange,
   currentSidebarItems,
   currentIconStyle,
-  pageGridItems,
-  onPageGridItemsChange,
-  dockItems,
-  onDockItemsChange,
+  gridItems,
+  onGridItemsChange,
 }: ComponentLayoutProps) => {
   return (
     <>
@@ -81,17 +76,18 @@ export const ComponentLayout = ({
           currentPageId={currentPageId}
           currentIconStyle={currentIconStyle}
           openInNewTab={openInNewTab.icon}
-          pageGridItems={pageGridItems}
-          onItemsChange={onPageGridItemsChange}
+          gridItems={gridItems}
+          onItemsChange={onGridItemsChange}
         />
-        <div className="flex-shrink-0">
+        {/* Dock 暂时注释，简化到和官方示例一样 */}
+        {/* <div className="flex-shrink-0">
           <Dock
             items={dockItems}
             onItemsChange={onDockItemsChange}
             openInNewTab={openInNewTab.icon}
             iconStyle={currentIconStyle}
           />
-        </div>
+        </div> */}
       </div>
     </>
   );

@@ -17,7 +17,7 @@ import { createDragHandlers } from "@/lib/drag-handlers";
 import { closestCenter } from "@dnd-kit/core";
 import { useGridStore } from "@/lib/grid-store";
 import builtinIcons from "@/json/index";
-import type { DockItem, GridItem } from "@/lib/grid-model";
+import type { GridItem } from "@/lib/grid-model";
 
 
 
@@ -71,21 +71,17 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   });
 
   const {
-    pageGridItems,
-    dockItems,
+    gridItems,
     activeId,
-    setPageGridItems,
-    setDockItems,
+    setGridItems,
     setActiveId,
     initialize,
   } = useGridStore();
 
   const baseTime = useMemo(() => Date.now(), []);
-  const initialPageGridItems = useMemo<Record<string, GridItem[]>>(() => {
-    const firstPageId = sidebarItems?.[0]?.id || "1";
-
+  const initialGridItems = useMemo<GridItem[]>(() => {
     if (iconItems && iconItems.length > 0) {
-      return { [firstPageId]: iconItems as GridItem[] };
+      return iconItems as GridItem[];
     }
 
     const fallbackIcons: GridItem[] = builtinIcons.map((item, index) => ({
@@ -94,14 +90,14 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       id: `${item.id}-${baseTime}-${index}`,
     }));
 
-    return { [firstPageId]: fallbackIcons };
-  }, [baseTime, iconItems, sidebarItems]);
+    return fallbackIcons;
+  }, [baseTime, iconItems]);
 
   useEffect(() => {
-    if (Object.keys(pageGridItems).length === 0) {
-      initialize(initialPageGridItems, (initialDockItems as DockItem[] | null) || []);
+    if (gridItems.length === 0) {
+      initialize(initialGridItems);
     }
-  }, [initialize, initialDockItems, initialPageGridItems, pageGridItems]);
+  }, [initialize, initialGridItems, gridItems]);
 
   const switchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -112,9 +108,8 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   );
 
   const dragHandlers = createDragHandlers(
-    { pageGridItems, currentPageId, dockItems },
-    { setActiveId, setDragOverPageId, setCurrentPageId, setPageGridItems, setDockItems },
-    switchTimeoutRef
+    { gridItems },
+    { setActiveId, setGridItems }
   );
 
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
@@ -142,8 +137,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   });
 
   usePreloadAssets({
-    pageGridItems,
-    dockItems,
+    gridItems,
     avatarUrl,
   });
 
@@ -181,9 +175,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
         backgroundUrl,
         sidebarSettings,
         activeId,
-        pageGridItems,
-        currentPageId,
-        dockItems,
+        gridItems,
         currentIconStyle,
       }}
     >
@@ -202,40 +194,22 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
           onSidebarItemsChange={setCurrentSidebarItems}
           currentSidebarItems={currentSidebarItems}
           currentIconStyle={currentIconStyle}
-          pageGridItems={pageGridItems}
-          onPageGridItemsChange={async (newPageGridItems) => {
-            setPageGridItems(newPageGridItems);
+          gridItems={gridItems}
+          onGridItemsChange={async (newGridItems) => {
+            setGridItems(newGridItems);
             try {
               await fetch("/api/settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  key: "page_grid_items",
-                  value: JSON.stringify(newPageGridItems),
+                  key: "icon_items",
+                  value: JSON.stringify(newGridItems),
                 }),
               });
               const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
               await updateRemoteTimestamp("gridIcons");
             } catch (error) {
-              console.error("Failed to save page grid items:", error);
-            }
-          }}
-          dockItems={dockItems}
-          onDockItemsChange={async (newDockItems) => {
-            setDockItems(newDockItems);
-            try {
-              await fetch("/api/settings", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  key: "dock_items",
-                  value: JSON.stringify(newDockItems),
-                }),
-              });
-              const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
-              await updateRemoteTimestamp("dockIcons");
-            } catch (error) {
-              console.error("Failed to save dock items:", error);
+              console.error("Failed to save grid items:", error);
             }
           }}
         />

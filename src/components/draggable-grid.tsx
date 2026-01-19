@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { HexColorPicker } from "react-colorful";
 import {
   SortableContext,
@@ -111,18 +111,19 @@ const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth,
   onEdit: (item: IconItem) => void;
   isFolderPreviewTarget: boolean;
 }) => {
+  const ANIMATION_DURATION_MS = 750;  // 和官方示例一致
+  
   const {
     attributes,
     listeners,
     setNodeRef,
-    transform,
     isDragging,
   } = useSortable({
     id: item.id,
-    transition: { duration: 300, easing: "ease" },
+    transition: { duration: ANIMATION_DURATION_MS, easing: "ease" },  // 和官方示例一致
   });
 
-  // 外层 div 只控制 opacity，不应用 transform
+  // 外层 div 只控制 opacity，不应用 transform（和官方示例一致）
   const wrapperStyle = {
     opacity: isDragging ? 0 : 1,
   } as React.CSSProperties;
@@ -259,7 +260,9 @@ const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth,
         onContextMenu={handleContextMenu}
         transition={{
           type: "spring",
-          duration: isDragging ? 0.3 : 0.9,
+          duration: isDragging 
+            ? ANIMATION_DURATION_MS / 1000 
+            : (ANIMATION_DURATION_MS / 1000) * 3  // 和官方示例一致
         }}
       >
         <div 
@@ -322,16 +325,16 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
 };
 
 
-export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, allPageItems, currentPageId, onItemsChange }: { 
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, items, onItemsChange }: { 
   openInNewTab?: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
-  allPageItems?: Record<string, GridItem[]>;
-  currentPageId?: string;
-  onItemsChange?: (allPageItems: Record<string, GridItem[]>) => void;
+  items?: GridItem[];  // 简化：直接使用 items 数组
+  onItemsChange?: (items: GridItem[]) => void;
 }) => {
-  // 使用所有页面的数据，但只显示当前页面
-  const pageItems = allPageItems || {};
-  const currentItems = pageItems[currentPageId || "1"] || [];
+  const currentItems = items || [];
+  
+  // 使用 useMemo 缓存 items 的 id 数组，避免每次渲染都创建新数组
+  const itemIds = useMemo(() => currentItems.map(item => item.id), [currentItems]);
 
 
 
@@ -395,11 +398,10 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
 
   const handleDelete = async (id: string) => {
     const newCurrentItems = currentItems.filter(item => item.id !== id);
-    const newPageItems = { ...pageItems, [currentPageId || "1"]: newCurrentItems };
 
     // 通知父组件
     if (onItemsChange) {
-      onItemsChange(newPageItems);
+      onItemsChange(newCurrentItems);
     }
   };
 
@@ -413,10 +415,9 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
           ? { ...item, name: newName.trim() }
           : item
       );
-      const newPageItems = { ...pageItems, [currentPageId || '1']: newCurrentItems };
 
       if (onItemsChange) {
-        onItemsChange(newPageItems);
+        onItemsChange(newCurrentItems);
       }
     }
   };
@@ -436,10 +437,9 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
         const newCurrentItems = currentItems.map(item => 
           item.id === folderId ? remainingItem : item
         );
-        const newPageItems = { ...pageItems, [currentPageId || '1']: newCurrentItems };
 
         if (onItemsChange) {
-          onItemsChange(newPageItems);
+          onItemsChange(newCurrentItems);
         }
       }
     } else {
@@ -453,11 +453,9 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
       const newCurrentItems = [...currentItems];
       newCurrentItems[folderIndex] = updatedFolder;
       newCurrentItems.push(removedItem);
-      
-      const newPageItems = { ...pageItems, [currentPageId || '1']: newCurrentItems };
 
       if (onItemsChange) {
-        onItemsChange(newPageItems);
+        onItemsChange(newCurrentItems);
       }
     }
   };
@@ -552,7 +550,6 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     if (!formData.url.trim() || !formData.name.trim()) return;
 
     let newCurrentItems: GridItem[];
-    const pageId = currentPageId || '1';
 
     if (isEditMode && editingItem) {
       // 编辑模式：更新现有图标
@@ -586,11 +583,9 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
       newCurrentItems = [...currentItems, newItem];
     }
 
-    const newPageItems = { ...pageItems, [pageId]: newCurrentItems };
-
     // 通知父组件
     if (onItemsChange) {
-      onItemsChange(newPageItems);
+      onItemsChange(newCurrentItems);
     }
 
 
@@ -696,7 +691,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   return (
     <>
       <div className="w-full overflow-visible p-2" ref={setGridDroppableRef}>
-        <SortableContext items={currentItems.map((item) => item.id)} strategy={rectSortingStrategy}>
+        <SortableContext items={itemIds} strategy={rectSortingStrategy}>
           <div
             className={cn(
               "grid w-full overflow-visible",
