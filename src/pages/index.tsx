@@ -14,7 +14,7 @@ import { usePreloadAssets } from "@/hooks/use-preload-assets";
 
 import { useSyncListeners } from "@/hooks/use-sync-listeners";
 import { createDragHandlers } from "@/lib/drag-handlers";
-import { createCustomCollisionDetection } from "@/lib/collision-detection";
+import { closestCenter } from "@dnd-kit/core";
 import { useGridStore } from "@/lib/grid-store";
 import builtinIcons from "@/json/index";
 import type { DockItem, GridItem } from "@/lib/grid-model";
@@ -111,8 +111,6 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     })
   );
 
-  const customCollisionDetection = createCustomCollisionDetection(currentSidebarSettings);
-
   const dragHandlers = createDragHandlers(
     { pageGridItems, currentPageId, dockItems },
     { setActiveId, setDragOverPageId, setCurrentPageId, setPageGridItems, setDockItems },
@@ -164,7 +162,7 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       onContextMenu={handleContextMenu}
       dndContextProps={{
         sensors,
-        collisionDetection: customCollisionDetection,
+        collisionDetection: closestCenter,
         onDragStart: dragHandlers.onDragStart,
         onDragOver: dragHandlers.onDragOver,
         onDragEnd: dragHandlers.onDragEnd,

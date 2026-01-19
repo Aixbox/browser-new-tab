@@ -1,6 +1,5 @@
 // 拖拽相关的处理逻辑
 import { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
-import { isInFolderCreationMode, isInSortingMode, resetHoverState } from "./collision-detection";
 import { isFolder, isIcon, stripTempPreviews } from "@/lib/grid-model";
 import type { GridItem, IconItem, FolderItem } from "@/lib/grid-model";
 
@@ -33,7 +32,6 @@ export function createDragHandlers(
   const handleDragStart = (event: DragStartEvent) => {
     const activeId = event.active.id as string;
     setState.setActiveId(activeId);
-    resetHoverState();
   };
 
 
@@ -41,14 +39,6 @@ export function createDragHandlers(
     const { over, active } = event;
 
     if (!over || over.id === active.id) {
-      return;
-    }
-
-    if (isInFolderCreationMode()) {
-      return;
-    }
-
-    if (!isInSortingMode()) {
       return;
     }
 
@@ -87,14 +77,11 @@ export function createDragHandlers(
     console.log('=== DragEnd Debug ===');
     console.log('active.id:', active.id);
     console.log('over?.id:', over?.id);
-    console.log('isInFolderCreationMode:', isInFolderCreationMode());
     
     setState.setActiveId(null);
     
     // 通知文件夹对话框拖动已结束
     window.dispatchEvent(new CustomEvent('folderDragEnd'));
-    const wasInFolderMode = isInFolderCreationMode();
-    resetHoverState();
 
 
 
@@ -199,21 +186,6 @@ export function createDragHandlers(
     if (over?.id && over.id !== active.id && !over.id.toString().startsWith('sidebar-button-') && over.id !== 'dock-droppable' && over.id !== 'grid-droppable') {
       const currentGridItems = cleanPageGridItems[state.currentPageId] || [];
       const targetItem = currentGridItems.find(item => item.id === over.id);
-      
-      // 如果在文件夹创建模式下，且目标是普通图标，创建文件夹
-      if (wasInFolderMode && targetItem && draggedFromGrid && isIcon(targetItem) && isIcon(draggedFromGrid) && sourcePageId === state.currentPageId) {
-        console.log('Creating folder (was in folder mode)!');
-        await handleCreateFolder(
-          active.id as string,
-          over.id as string,
-          draggedFromGrid,
-          targetItem,
-          cleanPageGridItems,
-          state,
-          setState
-        );
-        return;
-      }
       
       // 如果目标是文件夹且拖拽源是图标，添加到文件夹
       if (targetItem && isFolder(targetItem) && draggedFromGrid && isIcon(draggedFromGrid)) {
@@ -323,43 +295,6 @@ export function createDragHandlers(
 }
 
 // 辅助函数
-// 创建文件夹
-async function handleCreateFolder(
-  activeId: string,
-  targetId: string,
-  draggedItem: IconItem,
-  targetItem: IconItem,
-  cleanPageGridItems: Record<string, GridItem[]>,
-  state: DragState,
-  setState: any
-) {
-  const currentGridItems = cleanPageGridItems[state.currentPageId] || [];
-  
-  // 创建新文件夹
-  const newFolder: FolderItem = {
-    id: `folder-${Date.now()}`,
-    name: '新文件夹',
-    type: 'folder',
-    items: [targetItem, draggedItem]
-  };
-  
-  // 移除两个原始图标，添加文件夹
-  const newCurrentItems = currentGridItems
-    .filter(item => item.id !== activeId && item.id !== targetId);
-  
-  // 在目标位置插入文件夹
-  const targetIndex = currentGridItems.findIndex(item => item.id === targetId);
-  newCurrentItems.splice(targetIndex, 0, newFolder);
-  
-  const newPageGridItems = {
-    ...cleanPageGridItems,
-    [state.currentPageId]: newCurrentItems
-  };
-  
-  setState.setPageGridItems(newPageGridItems);
-  await savePageGridItems(newPageGridItems);
-}
-
 // 添加图标到文件夹
 async function handleAddToFolder(
   activeId: string,
