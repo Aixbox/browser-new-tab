@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { HexColorPicker } from "react-colorful";
 import {
   SortableContext,
@@ -102,7 +102,7 @@ const TextIcon = ({ text, color, size = 'small' }: { text: string; color: string
 
 
 // 可拖拽的图标项
-const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, onEdit, isFolderPreviewTarget }: { 
+const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, onEdit, isFolderPreviewTarget }: { 
   item: IconItem;
   openInNewTab: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; showName: boolean; nameSize: number; nameColor: string };
@@ -111,50 +111,21 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
   onEdit: (item: IconItem) => void;
   isFolderPreviewTarget: boolean;
 }) => {
-  const [wasJustDragging, setWasJustDragging] = useState(false);
-
-  
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
-    transition,
     isDragging,
   } = useSortable({
     id: item.id,
-    transition: { duration: 300, easing: "cubic-bezier(0.14, 1, 0.28, 1)" },
+    transition: { duration: 300, easing: "ease" },
   });
 
-
-  // 跟踪拖动状态变化
-  useEffect(() => {
-    if (isDragging) {
-      setWasJustDragging(true);
-    } else if (wasJustDragging) {
-      // 拖动刚结束，延迟一点点再重置，确保状态同步
-      const timer = setTimeout(() => {
-        setWasJustDragging(false);
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isDragging, wasJustDragging]);
-
-
-
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: transition ? transition.replace(/opacity[^,]*(,|$)/g, '$1') : undefined,  // 移除 opacity 的过渡
+  // 外层 div 只控制 opacity，不应用 transform
+  const wrapperStyle = {
     opacity: isDragging ? 0 : 1,
-    willChange: 'transform, opacity',  // 优化性能
   } as React.CSSProperties;
-
-  
-  // 调试日志
-  if (item.id.includes('test-icon')) {
-    console.log(`[DraggableItem ${item.name}] isDragging: ${isDragging}, opacity: ${isDragging ? 0 : 1}`);
-  }
 
   const renderIcon = () => {
     const iconSize = iconStyle?.size || 80;
@@ -277,40 +248,47 @@ const DraggableItem = ({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, 
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="relative cursor-grab active:cursor-grabbing overflow-visible"
-      onClick={handleClick}
-      onContextMenu={handleContextMenu}
+      style={wrapperStyle}
     >
-      <div 
-        className={cn(
-          "transition-all duration-300",
-          isFolderPreviewTarget && "ring-4 ring-blue-400/80 rounded-xl scale-105"
-        )}
-
-        style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
+      <motion.div
+        layoutId={item.id}
+        {...attributes}
+        {...listeners}
+        className="relative cursor-grab active:cursor-grabbing overflow-visible"
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        transition={{
+          type: "spring",
+          duration: isDragging ? 0.3 : 0.9,
+        }}
       >
-        {renderIcon()}
-      </div>
-      {showName && !isDragging && (
-        <span 
-          className="font-medium leading-tight text-center block truncate"
-          style={{
-            fontSize: `${nameSize}px`,
-            color: nameColor,
-            marginTop: '8px',
-            width: `${nameMaxWidth}px`,
-            marginLeft: `${-(nameMaxWidth - iconSize) / 2}px`,
-          }}
+        <div 
+          className={cn(
+            "transition-all duration-300",
+            isFolderPreviewTarget && "ring-4 ring-blue-400/80 rounded-xl scale-105"
+          )}
+          style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
         >
-          {item.name}
-        </span>
-      )}
+          {renderIcon()}
+        </div>
+        {showName && (
+          <span 
+            className="font-medium leading-tight text-center block truncate"
+            style={{
+              fontSize: `${nameSize}px`,
+              color: nameColor,
+              marginTop: '8px',
+              width: `${nameMaxWidth}px`,
+              marginLeft: `${-(nameMaxWidth - iconSize) / 2}px`,
+            }}
+          >
+            {item.name}
+          </span>
+        )}
+      </motion.div>
     </div>
   );
-};
+});
 
 // 添加新图标的占位符
 const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => void; iconSize?: number; nameMaxWidth: number }) => {

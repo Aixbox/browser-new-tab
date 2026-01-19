@@ -1,5 +1,6 @@
 // 拖拽相关的处理逻辑
 import { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { isFolder, isIcon, stripTempPreviews } from "@/lib/grid-model";
 import type { GridItem, IconItem, FolderItem } from "@/lib/grid-model";
 
@@ -68,6 +69,19 @@ export function createDragHandlers(
 
     if (over.id === "dock-droppable" || over.id === "grid-droppable") {
       return;
+    }
+
+    // 实时更新同页面排序（Framer Motion 会自动处理动画）
+    const currentGridItems = state.pageGridItems[state.currentPageId] || [];
+    const activeIndex = currentGridItems.findIndex((item: GridItem) => item.id === active.id);
+    const overIndex = currentGridItems.findIndex((item: GridItem) => item.id === over.id);
+    
+    // 只有当位置真的改变时才更新（避免无限循环）
+    if (activeIndex !== -1 && overIndex !== -1 && activeIndex !== overIndex) {
+      setState.setPageGridItems({
+        ...state.pageGridItems,
+        [state.currentPageId]: arrayMove(currentGridItems, activeIndex, overIndex)
+      });
     }
   };
 
@@ -270,15 +284,10 @@ export function createDragHandlers(
       return;
     }
 
-    // 同页面排序
-    if (currentDraggedFromGrid && active.id !== over?.id && over?.id) {
-      await handleSamePageReorder(
-        active.id as string,
-        over.id as string,
-        currentGridItems,
-        state,
-        setState
-      );
+    // 同页面排序 - 顺序已在 onDragOver 中实时更新，这里只需保存
+    if (currentDraggedFromGrid && sourcePageId === state.currentPageId) {
+      await savePageGridItems(state.pageGridItems);
+      return;
     }
 
     // Dock 内部排序
