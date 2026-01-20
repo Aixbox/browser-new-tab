@@ -101,7 +101,7 @@ const TextIcon = ({ text, color, size = 'small' }: { text: string; color: string
 
 
 
-// 可拖拽的图标项
+// 可拖拽的图标项（使用 React.memo 优化，只在 id 变化时重新渲染）
 const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth, onDelete, onEdit, isFolderPreviewTarget }: { 
   item: IconItem;
   openInNewTab: boolean;
@@ -291,6 +291,13 @@ const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth,
       </motion.div>
     </div>
   );
+}, (prevProps, nextProps) => {
+  // 自定义比较函数：只在 id 变化时才重新渲染
+  return prevProps.item.id === nextProps.item.id &&
+         prevProps.openInNewTab === nextProps.openInNewTab &&
+         prevProps.iconStyle === nextProps.iconStyle &&
+         prevProps.nameMaxWidth === nextProps.nameMaxWidth &&
+         prevProps.isFolderPreviewTarget === nextProps.isFolderPreviewTarget;
 });
 
 // 添加新图标的占位符
@@ -325,16 +332,18 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
 };
 
 
-export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, items, onItemsChange }: { 
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, itemIds, itemsMap, onItemsChange }: { 
   openInNewTab?: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
-  items?: GridItem[];  // 简化：直接使用 items 数组
-  onItemsChange?: (items: GridItem[]) => void;
+  itemIds?: string[];  // 改用 id 数组（和官方示例一致）
+  itemsMap?: Record<string, GridItem>;  // 和 Map 存储完整对象
+  onItemsChange?: (newItemIds: string[], newItemsMap: Record<string, GridItem>) => void;
 }) => {
-  const currentItems = items || [];
+  const currentItemIds = itemIds || [];
+  const currentItemsMap = itemsMap || {};
   
-  // 使用 useMemo 缓存 items 的 id 数组，避免每次渲染都创建新数组
-  const itemIds = useMemo(() => currentItems.map(item => item.id), [currentItems]);
+  // 不再需要 useMemo 和复杂的缓存逻辑！
+  // itemIds 本身就是 id 数组，直接传给 SortableContext（和官方示例完全一致）
 
 
 
@@ -380,6 +389,95 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     return () => window.removeEventListener('openInNewTabChanged', handleSettingsChange as EventListener);
   }, []);
 
+  // 使用 useCallback 缓存所有处理函数，但不依赖 currentItemIds 和 currentItemsMap
+  // 而是在函数内部直接使用最新的 props
+  const handleDelete = useCallback(async (id: string) => {
+    if (!itemIds || !itemsMap) return;
+    
+    const newItemIds = itemIds.filter(itemId => itemId !== id);
+    const newItemsMap = { ...itemsMap };
+    delete newItemsMap[id];
+
+    if (onItemsChange) {
+      onItemsChange(newItemIds, newItemsMap);
+    }
+  }, [itemIds, itemsMap, onItemsChange]);
+
+  const handleEdit = useCallback((item: IconItem) => {
+    setEditingItem(item);
+    setIsEditMode(true);
+    setFormData({
+      url: item.url,
+      name: item.name,
+      iconLogo: item.iconLogo || '',
+      iconImage: item.iconImage || '',
+      iconText: item.iconText || '',
+      iconColor: item.iconColor || '#3b82f6',
+    });
+    setSelectedIconType(item.iconType);
+    setIsDialogOpen(true);
+  }, []);
+
+  const handleFolderEdit = useCallback((folder: FolderItem) => {
+    if (!itemIds || !itemsMap) return;
+    
+    const newName = prompt('请输入新的文件夹名称', folder.name);
+    if (newName && newName.trim()) {
+      const newItemsMap = {
+        ...itemsMap,
+        [folder.id]: { ...folder, name: newName.trim() }
+      };
+
+      if (onItemsChange) {
+        onItemsChange(itemIds, newItemsMap);
+      }
+    }
+  }, [itemIds, itemsMap, onItemsChange]);
+
+  const handleRemoveFromFolder = useCallback((folderId: string, itemId: string) => {
+    if (!itemIds || !itemsMap) return;
+    
+    const folder = itemsMap[folderId];
+    if (!folder || !isFolder(folder)) return;
+
+    const removedItem = folder.items.find(item => item.id === itemId);
+    if (!removedItem) return;
+
+    // 如果文件夹只剩2个图标，移除一个后解散文件夹
+    if (folder.items.length === 2) {
+      const remainingItem = folder.items.find(item => item.id !== itemId);
+      if (remainingItem) {
+        const newItemsMap = { ...itemsMap, [folderId]: remainingItem };
+
+        if (onItemsChange) {
+          onItemsChange(itemIds, newItemsMap);
+        }
+      }
+    } else {
+      // 更新文件夹，移除图标并将其添加到网格
+      const updatedFolder: FolderItem = {
+        ...folder,
+        items: folder.items.filter(item => item.id !== itemId)
+      };
+      
+      const newItemIds = [...itemIds, removedItem.id];
+      const newItemsMap = {
+        ...itemsMap,
+        [folderId]: updatedFolder,
+        [removedItem.id]: removedItem
+      };
+
+      if (onItemsChange) {
+        onItemsChange(newItemIds, newItemsMap);
+      }
+    }
+  }, [itemIds, itemsMap, onItemsChange]);
+
+  const handleOpenFolderItem = useCallback((item: IconItem) => {
+    const target = openInNewTab ? '_blank' : '_self';
+    window.open(item.url, target);
+  }, [openInNewTab]);
+
 
 
 
@@ -395,91 +493,6 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
     '#06b6d4', // 青色
     '#84cc16', // 黄绿色
   ];
-
-  const handleDelete = async (id: string) => {
-    const newCurrentItems = currentItems.filter(item => item.id !== id);
-
-    // 通知父组件
-    if (onItemsChange) {
-      onItemsChange(newCurrentItems);
-    }
-  };
-
-
-  // 处理文件夹编辑（重命名）
-  const handleFolderEdit = (folder: FolderItem) => {
-    const newName = prompt('请输入新的文件夹名称', folder.name);
-    if (newName && newName.trim()) {
-      const newCurrentItems = currentItems.map(item => 
-        item.id === folder.id && isFolder(item)
-          ? { ...item, name: newName.trim() }
-          : item
-      );
-
-      if (onItemsChange) {
-        onItemsChange(newCurrentItems);
-      }
-    }
-  };
-
-  // 从文件夹中移除图标
-  const handleRemoveFromFolder = (folderId: string, itemId: string) => {
-    const folder = currentItems.find(item => item.id === folderId && isFolder(item)) as FolderItem | undefined;
-    if (!folder) return;
-
-    const removedItem = folder.items.find(item => item.id === itemId);
-    if (!removedItem) return;
-
-    // 如果文件夹只剩2个图标，移除一个后解散文件夹
-    if (folder.items.length === 2) {
-      const remainingItem = folder.items.find(item => item.id !== itemId);
-      if (remainingItem) {
-        const newCurrentItems = currentItems.map(item => 
-          item.id === folderId ? remainingItem : item
-        );
-
-        if (onItemsChange) {
-          onItemsChange(newCurrentItems);
-        }
-      }
-    } else {
-      // 更新文件夹，移除图标并将其添加到网格
-      const updatedFolder: FolderItem = {
-        ...folder,
-        items: folder.items.filter(item => item.id !== itemId)
-      };
-      
-      const folderIndex = currentItems.findIndex(item => item.id === folderId);
-      const newCurrentItems = [...currentItems];
-      newCurrentItems[folderIndex] = updatedFolder;
-      newCurrentItems.push(removedItem);
-
-      if (onItemsChange) {
-        onItemsChange(newCurrentItems);
-      }
-    }
-  };
-
-  // 打开文件夹中的图标
-  const handleOpenFolderItem = (item: IconItem) => {
-    const target = openInNewTab ? '_blank' : '_self';
-    window.open(item.url, target);
-  };
-
-  const handleEdit = (item: IconItem) => {
-    setEditingItem(item);
-    setIsEditMode(true);
-    setFormData({
-      url: item.url,
-      name: item.name,
-      iconLogo: item.iconLogo || '',
-      iconImage: item.iconImage || '',
-      iconText: item.iconText || '',
-      iconColor: item.iconColor || '#3b82f6',
-    });
-    setSelectedIconType(item.iconType);
-    setIsDialogOpen(true);
-  };
 
   // 从URL获取网站元数据
   const fetchMetadata = async (url: string) => {
@@ -549,25 +562,25 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   const handleSave = async (continueAdding: boolean = false) => {
     if (!formData.url.trim() || !formData.name.trim()) return;
 
-    let newCurrentItems: GridItem[];
+    let newItemIds: string[];
+    let newItemsMap: Record<string, GridItem>;
 
     if (isEditMode && editingItem) {
       // 编辑模式：更新现有图标
-      newCurrentItems = currentItems.map(item => {
-        if (item.id === editingItem.id && isIcon(item)) {
-          return {
-            ...item,
-            name: formData.name.trim(),
-            url: formData.url.trim(),
-            iconType: selectedIconType,
-            iconLogo: formData.iconLogo || undefined,
-            iconImage: formData.iconImage || undefined,
-            iconText: formData.iconText || undefined,
-            iconColor: formData.iconColor || undefined,
-          };
-        }
-        return item;
-      });
+      newItemIds = currentItemIds;
+      newItemsMap = {
+        ...currentItemsMap,
+        [editingItem.id]: {
+          ...currentItemsMap[editingItem.id],
+          name: formData.name.trim(),
+          url: formData.url.trim(),
+          iconType: selectedIconType,
+          iconLogo: formData.iconLogo || undefined,
+          iconImage: formData.iconImage || undefined,
+          iconText: formData.iconText || undefined,
+          iconColor: formData.iconColor || undefined,
+        } as GridItem
+      };
     } else {
       // 添加模式：创建新图标
       const newItem: IconItem = {
@@ -580,12 +593,13 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
         iconText: formData.iconText || undefined,
         iconColor: formData.iconColor || undefined,
       };
-      newCurrentItems = [...currentItems, newItem];
+      newItemIds = [...currentItemIds, newItem.id];
+      newItemsMap = { ...currentItemsMap, [newItem.id]: newItem };
     }
 
     // 通知父组件
     if (onItemsChange) {
-      onItemsChange(newCurrentItems);
+      onItemsChange(newItemIds, newItemsMap);
     }
 
 
@@ -691,7 +705,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   return (
     <>
       <div className="w-full overflow-visible p-2" ref={setGridDroppableRef}>
-        <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+        <SortableContext items={currentItemIds} strategy={rectSortingStrategy}>
           <div
             className={cn(
               "grid w-full overflow-visible",
@@ -703,7 +717,10 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
               transition: "all 0.3s ease-out",
             }}
           >
-            {currentItems.map((item) => {
+            {currentItemIds.map((id) => {
+              const item = currentItemsMap[id];
+              if (!item) return null;
+              
               if (isFolder(item)) {
                 return (
                   <FolderItemComponent

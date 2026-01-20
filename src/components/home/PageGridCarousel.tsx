@@ -10,8 +10,9 @@ interface PageGridCarouselProps {
   currentPageId: string;
   currentIconStyle: IconStyleSettings;
   openInNewTab: boolean;
-  gridItems: GridItem[];  // 简化：移除多页面结构
-  onItemsChange: (newGridItems: GridItem[]) => void | Promise<void>;
+  itemIds: string[];  // 改用 id 数组
+  itemsMap: Record<string, GridItem>;  // 和 Map
+  onItemsChange: (newItemIds: string[], newItemsMap: Record<string, GridItem>) => void | Promise<void>;
 }
 
 export const PageGridCarousel = ({
@@ -19,12 +20,12 @@ export const PageGridCarousel = ({
   currentPageId,
   currentIconStyle,
   openInNewTab,
-  gridItems,
+  itemIds,
+  itemsMap,
   onItemsChange,
 }: PageGridCarouselProps) => {
   return (
     <div className="flex-1 relative overflow-hidden">
-      {/* 暂时移除轮播动画，简化到和官方示例一样 */}
       <div className="w-full h-full flex flex-col">
         <div
           className="w-full flex-shrink-0 overflow-y-auto overflow-x-visible flex justify-center px-8 pb-8"
@@ -34,7 +35,8 @@ export const PageGridCarousel = ({
             <DraggableGrid
               openInNewTab={openInNewTab}
               iconStyle={currentIconStyle}
-              items={gridItems}
+              itemIds={itemIds}
+              itemsMap={itemsMap}
               onItemsChange={onItemsChange}
             />
           </div>

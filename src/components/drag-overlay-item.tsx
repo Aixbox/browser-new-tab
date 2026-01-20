@@ -5,23 +5,23 @@ import { isFolder, isIcon } from "@/lib/grid-model";
 
 interface DragOverlayItemProps {
   id: string;
-  gridItems: GridItem[];  // 简化：移除多页面结构
+  items: GridItem[];  // 改用数组（和官方示例一致）
   iconStyle: IconStyleSettings;
 }
 
 
 export function DragOverlayItem({ 
   id, 
-  gridItems,
+  items,
   iconStyle
 }: DragOverlayItemProps) {
 
-  // 先在顶层查找
-  let item = gridItems.find((candidate) => candidate.id === id) || null;
+  // 直接从数组中查找（和官方示例一致）
+  let item = items.find(item => item.id === id) || null;
 
   // 如果没找到，在文件夹内部查找
   if (!item) {
-    for (const gridItem of gridItems) {
+    for (const gridItem of items) {
       if (isFolder(gridItem)) {
         const foundInFolder = gridItem.items.find((folderItem) => folderItem.id === id);
         if (foundInFolder) {

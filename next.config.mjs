@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false, // 临时禁用以测试是否是 StrictMode 导致的问题
   eslint: {
     ignoreDuringBuilds: true,
   },

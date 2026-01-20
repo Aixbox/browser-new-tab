@@ -23,8 +23,9 @@ interface ComponentLayoutProps {
   onSidebarItemsChange: (items: SidebarItem[]) => void;
   currentSidebarItems: SidebarItem[];
   currentIconStyle: IconStyleSettings;
-  gridItems: GridItem[];  // 简化：移除多页面结构
-  onGridItemsChange: (newGridItems: GridItem[]) => void | Promise<void>;
+  itemIds: string[];  // 改用 id 数组（和官方示例一致）
+  itemsMap: Record<string, GridItem>;  // Map 存储完整对象
+  onItemsChange: (newItemIds: string[], newItemsMap: Record<string, GridItem>) => void | Promise<void>;
 }
 
 export const ComponentLayout = ({
@@ -41,8 +42,9 @@ export const ComponentLayout = ({
   onSidebarItemsChange,
   currentSidebarItems,
   currentIconStyle,
-  gridItems,
-  onGridItemsChange,
+  itemIds,
+  itemsMap,
+  onItemsChange,
 }: ComponentLayoutProps) => {
   return (
     <>
@@ -76,8 +78,9 @@ export const ComponentLayout = ({
           currentPageId={currentPageId}
           currentIconStyle={currentIconStyle}
           openInNewTab={openInNewTab.icon}
-          gridItems={gridItems}
-          onItemsChange={onGridItemsChange}
+          itemIds={itemIds}
+          itemsMap={itemsMap}
+          onItemsChange={onItemsChange}
         />
         {/* Dock 暂时注释，简化到和官方示例一样 */}
         {/* <div className="flex-shrink-0">

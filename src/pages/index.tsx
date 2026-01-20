@@ -1,30 +1,30 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { KVNamespace } from "@cloudflare/workers-types";
-import { PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { ComponentLayout, HomeShell, MinimalLayout } from "@/components/home";
+import { 
+  DndContext,
+  PointerSensor, 
+  useSensor, 
+  useSensors,
+  closestCenter,
+  DragOverlay,
+  defaultDropAnimation,
+} from "@dnd-kit/core";
+import { 
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { HomeShell } from "@/components/home";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
-import { useHomeState } from "@/hooks/use-home-state";
-import { useSettingsSync } from "@/hooks/use-settings-sync";
-import { useContextMenu } from "@/hooks/use-context-menu";
-import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
-import { usePageWheelSwitch } from "@/hooks/use-page-wheel-switch";
-import { usePreloadAssets } from "@/hooks/use-preload-assets";
-
-import { useSyncListeners } from "@/hooks/use-sync-listeners";
-import { createDragHandlers } from "@/lib/drag-handlers";
-import { closestCenter } from "@dnd-kit/core";
-import { useGridStore } from "@/lib/grid-store";
+import { DraggableItem } from "@/components/draggable-item";
+import { DragOverlayItem } from "@/components/drag-overlay-item";
+import { SettingsDialog } from "@/components/settings-drawer";
 import builtinIcons from "@/json/index";
 import type { GridItem } from "@/lib/grid-model";
 
-
-
-// 使用 Edge Runtime（与 UptimeFlare 对齐）
-export const config = {
-  runtime: 'experimental-edge',
-};
+const ANIMATION_DURATION_MS = 750;
 
 interface HomeProps {
   avatarUrl: string | null;
@@ -42,64 +42,40 @@ interface HomeProps {
   selectedEngine: string | null;
 }
 
+// 在组件外部初始化数据（和官方示例一样）
+// 使用固定的时间戳，避免 StrictMode 导致的重复初始化问题
+const INIT_TIMESTAMP = Date.now();
+
+function createInitialItems(iconItems: GridItem[] | null): GridItem[] {
+  return iconItems && iconItems.length > 0 
+    ? iconItems as GridItem[]
+    : builtinIcons.map((item, index) => ({
+        ...item,
+        iconType: item.iconType as "logo" | "image" | "text",
+        id: `${item.id}-${INIT_TIMESTAMP}-${index}`,
+      }));
+}
+
 export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewTab, layoutMode, iconStyle, backgroundUrl, sidebarSettings, iconItems, dockItems: initialDockItems, searchEngines, selectedEngine }: HomeProps) {
-  const {
-    isSettingsOpen,
-    setIsSettingsOpen,
-    currentLayoutMode,
-    setCurrentLayoutMode,
-    currentIconStyle,
-    setCurrentIconStyle,
-    currentBackgroundUrl,
-    setCurrentBackgroundUrl,
-    currentSidebarSettings,
-    setCurrentSidebarSettings,
-    isSidebarVisible,
-    setIsSidebarVisible,
-    currentSidebarItems,
-    setCurrentSidebarItems,
-    currentPageId,
-    setCurrentPageId,
-    dragOverPageId,
-    setDragOverPageId,
-  } = useHomeState({
-    layoutMode,
-    iconStyle,
-    backgroundUrl,
-    sidebarSettings,
-    sidebarItems,
-  });
-
-  const {
-    gridItems,
-    activeId,
-    setGridItems,
-    setActiveId,
-    initialize,
-  } = useGridStore();
-
-  const baseTime = useMemo(() => Date.now(), []);
-  const initialGridItems = useMemo<GridItem[]>(() => {
-    if (iconItems && iconItems.length > 0) {
-      return iconItems as GridItem[];
-    }
-
-    const fallbackIcons: GridItem[] = builtinIcons.map((item, index) => ({
-      ...item,
-      iconType: item.iconType as "logo" | "image" | "text",
-      id: `${item.id}-${baseTime}-${index}`,
-    }));
-
-    return fallbackIcons;
-  }, [baseTime, iconItems]);
-
-  useEffect(() => {
-    if (gridItems.length === 0) {
-      initialize(initialGridItems);
-    }
-  }, [initialize, initialGridItems, gridItems]);
-
-  const switchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // 和官方示例完全一致：维护 items 数组和 itemIds 数组
+  const [items] = useState<GridItem[]>(() => createInitialItems(iconItems));
+  const [itemIds, setItemIds] = useState<string[]>(() => items.map(item => item.id));
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  
+  // 使用 useMemo 确保 iconStyle 引用稳定，避免子组件不必要的重渲染
+  const currentIconStyle = useMemo(() => iconStyle, [
+    iconStyle.size,
+    iconStyle.borderRadius,
+    iconStyle.opacity,
+    iconStyle.spacing,
+    iconStyle.showName,
+    iconStyle.nameSize,
+    iconStyle.nameColor,
+    iconStyle.maxWidth,
+    iconStyle.dockShowName,
+  ]);
+  const currentBackgroundUrl = backgroundUrl;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -107,120 +83,113 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     })
   );
 
-  const dragHandlers = createDragHandlers(
-    { gridItems },
-    { setActiveId, setGridItems }
-  );
+  // 完全模仿官方示例 - 使用普通函数，不是 useCallback
+  function handleDragStart({ active }: any) {
+    setActiveId(active.id as string);
+  }
 
-  useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
-  useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
-  const { contextMenuPosition, handleContextMenu, closeContextMenu } = useContextMenu();
-  const { animationDirection } = usePageWheelSwitch(
-    currentSidebarItems,
-    currentPageId,
-    setCurrentPageId,
-    currentLayoutMode === "component"
-  );
+  function handleDragOver({ active, over }: any) {
+    if (!over || !active) return;
+    
+    // 只更新 itemIds 的顺序，items 数组保持不变
+    setItemIds((itemIds) => {
+      const oldIndex = itemIds.indexOf(active.id);
+      const newIndex = itemIds.indexOf(over.id);
+      
+      if (oldIndex === -1 || newIndex === -1) return itemIds;
+      
+      return arrayMove(itemIds, oldIndex, newIndex);
+    });
+  }
 
-  useEffect(() => {
-    console.log("[Animation] Direction changed to:", animationDirection, "Page:", currentPageId);
-  }, [animationDirection, currentPageId]);
+  function handleDragEnd() {
+    setActiveId(null);
+  }
 
-
-
-  useSyncListeners({
-    avatarUrl,
-    setCurrentIconStyle,
-    setCurrentBackgroundUrl,
-    setCurrentLayoutMode,
-    setCurrentSidebarSettings,
-  });
-
-  usePreloadAssets({
-    gridItems,
-    avatarUrl,
-  });
-
-  useEffect(() => {
-    return () => {
-      if (switchTimeoutRef.current) {
-        clearTimeout(switchTimeoutRef.current);
-      }
-    };
-  }, []);
+  // 创建 id -> item 的映射，用于快速查找
+  const itemsMap = useMemo(() => {
+    const map: Record<string, GridItem> = {};
+    items.forEach(item => {
+      map[item.id] = item;
+    });
+    return map;
+  }, [items]);
 
   return (
     <HomeShell
       title="新标签页"
       backgroundUrl={currentBackgroundUrl}
-      onContextMenu={handleContextMenu}
-      dndContextProps={{
-        sensors,
-        collisionDetection: closestCenter,
-        onDragStart: dragHandlers.onDragStart,
-        onDragOver: dragHandlers.onDragOver,
-        onDragEnd: dragHandlers.onDragEnd,
-      }}
-      overlays={{
-        contextMenuPosition,
-        onContextMenuSettings: () => setIsSettingsOpen(true),
-        onCloseContextMenu: closeContextMenu,
-        isSettingsOpen,
-        onSettingsOpenChange: setIsSettingsOpen,
-        avatarUrl,
-        hasSecretKey,
-        openInNewTab,
-        layoutMode,
-        iconStyle,
-        backgroundUrl,
-        sidebarSettings,
-        activeId,
-        gridItems,
-        currentIconStyle,
-      }}
+      onContextMenu={() => {}}
     >
-      {currentLayoutMode === "component" && (
-        <ComponentLayout
-          avatarUrl={avatarUrl}
-          sidebarItems={sidebarItems}
-          openInNewTab={openInNewTab}
-          searchEngines={searchEngines}
-          selectedEngine={selectedEngine}
-          currentSidebarSettings={currentSidebarSettings}
-          isSidebarVisible={isSidebarVisible}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onPageChange={setCurrentPageId}
-          currentPageId={currentPageId}
-          onSidebarItemsChange={setCurrentSidebarItems}
-          currentSidebarItems={currentSidebarItems}
-          currentIconStyle={currentIconStyle}
-          gridItems={gridItems}
-          onGridItemsChange={async (newGridItems) => {
-            setGridItems(newGridItems);
-            try {
-              await fetch("/api/settings", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  key: "icon_items",
-                  value: JSON.stringify(newGridItems),
-                }),
-              });
-              const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
-              await updateRemoteTimestamp("gridIcons");
-            } catch (error) {
-              console.error("Failed to save grid items:", error);
-            }
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        {/* 主内容区域 */}
+        <div className="relative h-full w-full flex flex-col z-10">
+          {/* 网格区域 - 完全模仿官方示例 */}
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div style={{ maxWidth: `${currentIconStyle.maxWidth}px`, width: '100%' }}>
+              <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+                <div
+                  className="grid w-full"
+                  style={{
+                    gridTemplateColumns: `repeat(auto-fill, ${currentIconStyle.size}px)`,
+                    gap: `${currentIconStyle.spacing}px`,
+                  }}
+                >
+                  {itemIds.map((id) => {
+                    const item = itemsMap[id];
+                    if (!item || 'items' in item) return null;
+                    
+                    return (
+                      <DraggableItem
+                        key={id}
+                        id={id}
+                        item={item as any}
+                        iconStyle={currentIconStyle}
+                        openInNewTab={openInNewTab.icon}
+                      />
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </div>
+          </div>
+        </div>
+
+        {/* DragOverlay */}
+        <DragOverlay
+          dropAnimation={{
+            ...defaultDropAnimation,
+            duration: ANIMATION_DURATION_MS / 2,
           }}
-        />
-      )}
-      {currentLayoutMode === "minimal" && (
-        <MinimalLayout
-          openInNewTab={openInNewTab}
-          searchEngines={searchEngines}
-          selectedEngine={selectedEngine}
-        />
-      )}
+        >
+          {activeId ? (
+            <DragOverlayItem
+              id={activeId}
+              items={items}
+              iconStyle={currentIconStyle}
+            />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        isOpen={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        initialAvatarUrl={avatarUrl}
+        hasSecretKey={hasSecretKey}
+        initialOpenInNewTab={openInNewTab}
+        initialLayoutMode={layoutMode}
+        initialIconStyle={iconStyle}
+        initialBackgroundUrl={backgroundUrl}
+        initialSidebarSettings={sidebarSettings}
+      />
     </HomeShell>
   );
 }

@@ -23,7 +23,7 @@ interface HomeOverlaysProps {
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
   activeId: string | null;
-  gridItems: GridItem[];  // 简化：移除多页面结构
+  itemsMap: Record<string, GridItem>;  // 改用 Map（和官方示例一致）
   currentIconStyle: IconStyleSettings;
 }
 
@@ -41,7 +41,7 @@ export const HomeOverlays = ({
   backgroundUrl,
   sidebarSettings,
   activeId,
-  gridItems,
+  itemsMap,
   currentIconStyle,
 }: HomeOverlaysProps) => {
   return (
@@ -76,7 +76,7 @@ export const HomeOverlays = ({
         {activeId ? (
           <DragOverlayItem
             id={activeId}
-            gridItems={gridItems}
+            itemsMap={itemsMap}
             iconStyle={currentIconStyle}
           />
         ) : null}
