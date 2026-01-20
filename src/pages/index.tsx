@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useCallback } from "react";
 import { KVNamespace } from "@cloudflare/workers-types";
 import { PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import type { DragStartEvent, DragOverEvent, DragEndEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { ComponentLayout, HomeShell, MinimalLayout } from "@/components/home";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
@@ -11,9 +13,7 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { usePageWheelSwitch } from "@/hooks/use-page-wheel-switch";
 import { usePreloadAssets } from "@/hooks/use-preload-assets";
-
 import { useSyncListeners } from "@/hooks/use-sync-listeners";
-import { createDragHandlers } from "@/lib/drag-handlers";
 import { closestCenter } from "@dnd-kit/core";
 import { useGridStore } from "@/lib/grid-store";
 import builtinIcons from "@/json/index";
@@ -74,9 +74,34 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     gridItems,
     activeId,
     setGridItems,
+    setGridItemIds,
     setActiveId,
     initialize,
   } = useGridStore();
+
+  // 监听 gridItems 变化，保存到服务器
+  useEffect(() => {
+    if (gridItems.length === 0) return;
+    
+    const saveToServer = async () => {
+      try {
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            key: "icon_items",
+            value: JSON.stringify(gridItems),
+          }),
+        });
+        const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
+        await updateRemoteTimestamp("gridIcons");
+      } catch (error) {
+        console.error("Failed to save grid items:", error);
+      }
+    };
+    
+    saveToServer();
+  }, [gridItems]);
 
   const baseTime = useMemo(() => Date.now(), []);
   const initialGridItems = useMemo<GridItem[]>(() => {
@@ -107,10 +132,46 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     })
   );
 
-  const dragHandlers = createDragHandlers(
-    { gridItems },
-    { setActiveId, setGridItems }
-  );
+  // 直接在组件中定义 drag handlers，可以访问最新的 store 状态
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  }, [setActiveId]);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { over, active } = event;
+
+    if (!over) return;
+    if (active.id === over.id) return;
+
+    // 只更新 ID 顺序，不更新完整数据
+    setGridItemIds((ids: string[]) => {
+      const oldIndex = ids.indexOf(active.id as string);
+      const newIndex = ids.indexOf(over.id as string);
+      
+      if (oldIndex === newIndex) return ids;
+      
+      console.log('[DragOver] 更新 ID 顺序:', active.id, '→', over.id);
+      return arrayMove(ids, oldIndex, newIndex);
+    });
+  }, [setGridItemIds]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveId(null);
+    
+    // 直接从 store 获取最新的 gridItemIds
+    const { gridItemIds: latestIds, gridItems: latestItems } = useGridStore.getState();
+    
+    console.log('[DragEnd] 使用最新的 gridItemIds:', latestIds);
+    
+    // 根据最新的 gridItemIds 重新排列 gridItems
+    const itemMap = new Map(latestItems.map((item: GridItem) => [item.id, item]));
+    const reorderedItems = latestIds
+      .map((id: string) => itemMap.get(id))
+      .filter((item): item is GridItem => item !== undefined);
+    
+    console.log('[DragEnd] 更新完整数据，保存到服务器');
+    setGridItems(reorderedItems);
+  }, [setActiveId, setGridItems]);
 
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
@@ -157,9 +218,9 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
       dndContextProps={{
         sensors,
         collisionDetection: closestCenter,
-        onDragStart: dragHandlers.onDragStart,
-        onDragOver: dragHandlers.onDragOver,
-        onDragEnd: dragHandlers.onDragEnd,
+        onDragStart: handleDragStart,
+        onDragOver: handleDragOver,
+        onDragEnd: handleDragEnd,
       }}
       overlays={{
         contextMenuPosition,
@@ -194,24 +255,6 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
           onSidebarItemsChange={setCurrentSidebarItems}
           currentSidebarItems={currentSidebarItems}
           currentIconStyle={currentIconStyle}
-          gridItems={gridItems}
-          onGridItemsChange={async (newGridItems) => {
-            setGridItems(newGridItems);
-            try {
-              await fetch("/api/settings", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  key: "icon_items",
-                  value: JSON.stringify(newGridItems),
-                }),
-              });
-              const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
-              await updateRemoteTimestamp("gridIcons");
-            } catch (error) {
-              console.error("Failed to save grid items:", error);
-            }
-          }}
         />
       )}
       {currentLayoutMode === "minimal" && (

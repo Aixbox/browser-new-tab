@@ -6,7 +6,6 @@ import { PageGridCarousel } from "@/components/home/PageGridCarousel";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
-import type { DockItem, GridItem } from "@/lib/grid-model";
 
 
 interface ComponentLayoutProps {
@@ -23,8 +22,6 @@ interface ComponentLayoutProps {
   onSidebarItemsChange: (items: SidebarItem[]) => void;
   currentSidebarItems: SidebarItem[];
   currentIconStyle: IconStyleSettings;
-  gridItems: GridItem[];  // 简化：移除多页面结构
-  onGridItemsChange: (newGridItems: GridItem[]) => void | Promise<void>;
 }
 
 export const ComponentLayout = ({
@@ -41,8 +38,6 @@ export const ComponentLayout = ({
   onSidebarItemsChange,
   currentSidebarItems,
   currentIconStyle,
-  gridItems,
-  onGridItemsChange,
 }: ComponentLayoutProps) => {
   return (
     <>
@@ -76,8 +71,6 @@ export const ComponentLayout = ({
           currentPageId={currentPageId}
           currentIconStyle={currentIconStyle}
           openInNewTab={openInNewTab.icon}
-          gridItems={gridItems}
-          onItemsChange={onGridItemsChange}
         />
         {/* Dock 暂时注释，简化到和官方示例一样 */}
         {/* <div className="flex-shrink-0">

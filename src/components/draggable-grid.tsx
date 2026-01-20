@@ -19,6 +19,7 @@ import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import * as Portal from "@radix-ui/react-portal";
 import { FolderItemComponent } from "./folder-item";
+import { useGridStore } from "@/lib/grid-store";
 
 
 // 图标加载组件 - 支持失败后使用代理
@@ -111,20 +112,21 @@ const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth,
   onEdit: (item: IconItem) => void;
   isFolderPreviewTarget: boolean;
 }) => {
-  const ANIMATION_DURATION_MS = 750;  // 和官方示例一致
-  
   const {
     attributes,
     listeners,
     setNodeRef,
+    transform,
+    transition,
     isDragging,
   } = useSortable({
-    id: item.id,
-    transition: { duration: ANIMATION_DURATION_MS, easing: "ease" },  // 和官方示例一致
+    id: item.id
   });
 
-  // 外层 div 只控制 opacity，不应用 transform（和官方示例一致）
-  const wrapperStyle = {
+  // 应用 transform 和 transition
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
     opacity: isDragging ? 0 : 1,
   } as React.CSSProperties;
 
@@ -249,21 +251,14 @@ const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth,
   return (
     <div
       ref={setNodeRef}
-      style={wrapperStyle}
+      style={style}
+      {...attributes}
+      {...listeners}
     >
-      <motion.div
-        layoutId={item.id}
-        {...attributes}
-        {...listeners}
+      <div
         className="relative cursor-grab active:cursor-grabbing overflow-visible"
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        transition={{
-          type: "spring",
-          duration: isDragging 
-            ? ANIMATION_DURATION_MS / 1000 
-            : (ANIMATION_DURATION_MS / 1000) * 3  // 和官方示例一致
-        }}
       >
         <div 
           className={cn(
@@ -288,7 +283,7 @@ const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth,
             {item.name}
           </span>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 });
@@ -325,16 +320,16 @@ const AddIconItem = ({ onClick, iconSize = 80, nameMaxWidth }: { onClick: () => 
 };
 
 
-export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle, items, onItemsChange }: { 
+export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconStyle }: { 
   openInNewTab?: boolean;
   iconStyle?: { size: number; borderRadius: number; opacity: number; spacing: number; showName: boolean; nameSize: number; nameColor: string; maxWidth: number };
-  items?: GridItem[];  // 简化：直接使用 items 数组
-  onItemsChange?: (items: GridItem[]) => void;
 }) => {
-  const currentItems = items || [];
+  // 直接从 store 获取数据
+  const { gridItems, gridItemIds, setGridItems } = useGridStore();
+  const currentItems = gridItems;
   
-  // 使用 useMemo 缓存 items 的 id 数组，避免每次渲染都创建新数组
-  const itemIds = useMemo(() => currentItems.map(item => item.id), [currentItems]);
+  // 使用 gridItemIds 作为 SortableContext 的 items（这样拖拽时会实时更新）
+  const itemIds = useMemo(() => gridItemIds.length > 0 ? gridItemIds : gridItems.map(item => item.id), [gridItemIds, gridItems]);
 
 
 
@@ -398,11 +393,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
 
   const handleDelete = async (id: string) => {
     const newCurrentItems = currentItems.filter(item => item.id !== id);
-
-    // 通知父组件
-    if (onItemsChange) {
-      onItemsChange(newCurrentItems);
-    }
+    setGridItems(newCurrentItems);
   };
 
 
@@ -415,10 +406,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
           ? { ...item, name: newName.trim() }
           : item
       );
-
-      if (onItemsChange) {
-        onItemsChange(newCurrentItems);
-      }
+      setGridItems(newCurrentItems);
     }
   };
 
@@ -437,10 +425,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
         const newCurrentItems = currentItems.map(item => 
           item.id === folderId ? remainingItem : item
         );
-
-        if (onItemsChange) {
-          onItemsChange(newCurrentItems);
-        }
+        setGridItems(newCurrentItems);
       }
     } else {
       // 更新文件夹，移除图标并将其添加到网格
@@ -453,10 +438,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
       const newCurrentItems = [...currentItems];
       newCurrentItems[folderIndex] = updatedFolder;
       newCurrentItems.push(removedItem);
-
-      if (onItemsChange) {
-        onItemsChange(newCurrentItems);
-      }
+      setGridItems(newCurrentItems);
     }
   };
 
@@ -583,11 +565,8 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
       newCurrentItems = [...currentItems, newItem];
     }
 
-    // 通知父组件
-    if (onItemsChange) {
-      onItemsChange(newCurrentItems);
-    }
-
+    // 更新 store
+    setGridItems(newCurrentItems);
 
     if (continueAdding && !isEditMode) {
       // 重置表单但保持对话框打开（仅在添加模式）

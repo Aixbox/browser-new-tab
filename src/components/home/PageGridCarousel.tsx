@@ -2,7 +2,6 @@ import { motion } from "framer-motion";
 import { DraggableGrid } from "@/components/draggable-grid";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
-import type { GridItem } from "@/lib/grid-model";
 
 
 interface PageGridCarouselProps {
@@ -10,8 +9,6 @@ interface PageGridCarouselProps {
   currentPageId: string;
   currentIconStyle: IconStyleSettings;
   openInNewTab: boolean;
-  gridItems: GridItem[];  // 简化：移除多页面结构
-  onItemsChange: (newGridItems: GridItem[]) => void | Promise<void>;
 }
 
 export const PageGridCarousel = ({
@@ -19,8 +16,6 @@ export const PageGridCarousel = ({
   currentPageId,
   currentIconStyle,
   openInNewTab,
-  gridItems,
-  onItemsChange,
 }: PageGridCarouselProps) => {
   return (
     <div className="flex-1 relative overflow-hidden">
@@ -34,8 +29,6 @@ export const PageGridCarousel = ({
             <DraggableGrid
               openInNewTab={openInNewTab}
               iconStyle={currentIconStyle}
-              items={gridItems}
-              onItemsChange={onItemsChange}
             />
           </div>
         </div>
