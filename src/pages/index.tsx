@@ -144,15 +144,15 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     if (active.id === over.id) return;
 
     // 只更新 ID 顺序，不更新完整数据
-    setGridItemIds((ids: string[]) => {
-      const oldIndex = ids.indexOf(active.id as string);
-      const newIndex = ids.indexOf(over.id as string);
+    // setGridItemIds((ids: string[]) => {
+    //   const oldIndex = ids.indexOf(active.id as string);
+    //   const newIndex = ids.indexOf(over.id as string);
       
-      if (oldIndex === newIndex) return ids;
+    //   if (oldIndex === newIndex) return ids;
       
-      console.log('[DragOver] 更新 ID 顺序:', active.id, '→', over.id);
-      return arrayMove(ids, oldIndex, newIndex);
-    });
+    //   console.log('[DragOver] 更新 ID 顺序:', active.id, '→', over.id);
+    //   return arrayMove(ids, oldIndex, newIndex);
+    // });
   }, [setGridItemIds]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
