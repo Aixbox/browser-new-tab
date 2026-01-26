@@ -7,7 +7,10 @@ import {
   rectSortingStrategy,
   useSortable,
 } from "@dnd-kit/sortable";
-import { useDroppable } from "@dnd-kit/core";
+import { customRectSorting } from "@/lib/custom-rect-sorting";
+import { customGridSortingStrategy } from "@/lib/custom-grid-sorting-strategy";
+import { useDroppable, useDndMonitor } from "@dnd-kit/core";
+import type { DragOverEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GlobeIcon, PlusIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
@@ -126,97 +129,13 @@ const DraggableItem = React.memo(({ item, openInNewTab, iconStyle, nameMaxWidth,
     id: item.id
   });
 
-  // 判断是否应该应用 transform
-  const shouldApplyTransform = useMemo(() => {
-    // 如果没有 transform，直接返回 true（不影响）
-    if (!transform) return true;
-    
-    // 如果是正在拖拽的元素，始终应用 transform
-    if (isDragging) return true;
-    
-    // 如果没有 active 或 over，应用 transform
-    if (!active || !over) return true;
-    
-    // 只有当前元素是 over 目标时才需要判断
-    if (over.id !== item.id) return true;
-    
-    // 获取当前元素和拖拽元素的位置信息
-    const currentRect = rect.current;
-    const activeRect = active.rect.current.translated;
-    
-    if (!currentRect || !activeRect) return true;
-    
-    // 1. 判断是否在同一行（Y 坐标差距小于元素高度的一半）
-    const isSameRow = Math.abs(currentRect.top - activeRect.top) < currentRect.height / 2;
-    
-    if (!isSameRow) {
-      console.log('[DraggableItem] 不在同一行，不交换', {
-        current: item.id,
-        active: active.id,
-        currentY: Math.round(currentRect.top),
-        activeY: Math.round(activeRect.top),
-      });
-      return false;
-    }
-    
-    // 2. 判断拖拽元素的中心点位置
-    const activeCenterX = activeRect.left + activeRect.width / 2;
-    const activeCenterY = activeRect.top + activeRect.height / 2;
-    
-    // 3. 判断当前元素（交换目标）在拖拽元素的左边还是右边
-    const currentCenterX = currentRect.left + currentRect.width / 2;
-    const isCurrentOnLeft = currentCenterX < activeCenterX;
-    
-    // 4. 定义边缘区域（左右各 1/4 为边缘，中间 1/2 为中心）
-    const leftEdge = currentRect.left + currentRect.width / 2.5;
-    const rightEdge = currentRect.right - currentRect.width / 2.5;
-    const topEdge = currentRect.top + currentRect.height / 4;
-    const bottomEdge = currentRect.bottom - currentRect.height / 4;
-    
-    // 5. 判断是否触碰上下边缘
-    if (activeCenterY < topEdge || activeCenterY > bottomEdge) {
-      console.log('[DraggableItem] 触碰上下边缘，不交换', {
-        current: item.id,
-        active: active.id,
-        activeCenterY: Math.round(activeCenterY),
-        topEdge: Math.round(topEdge),
-        bottomEdge: Math.round(bottomEdge),
-      });
-      return false;
-    }
-    
-    // 6. 根据相对位置判断是否应该交换
-    if (isCurrentOnLeft) {
-      // 当前元素在拖拽元素左边：只有拖拽元素在左边缘时才交换
-      const shouldSwap = activeCenterX < leftEdge;
-      console.log('[DraggableItem] 当前在左边', {
-        current: item.id,
-        active: active.id,
-        activeCenterX: Math.round(activeCenterX),
-        leftEdge: Math.round(leftEdge),
-        shouldSwap,
-      });
-      return shouldSwap;
-    } else {
-      // 当前元素在拖拽元素右边：只有拖拽元素在右边缘时才交换
-      const shouldSwap = activeCenterX > rightEdge;
-      console.log('[DraggableItem] 当前在右边', {
-        current: item.id,
-        active: active.id,
-        activeCenterX: Math.round(activeCenterX),
-        rightEdge: Math.round(rightEdge),
-        shouldSwap,
-      });
-      
-      return shouldSwap;
-    }
-  }, [transform, isDragging, active, over, rect, item.id]);
+  // 判断是否应该应用 transform（已移除，所有元素都应用 transform）
 
-  // 应用 transform 和 transition
+  // 应用 transform 和 transition（关键：所有元素都应用）
   const style = {
-    transform: shouldApplyTransform ? CSS.Transform.toString(transform) : undefined,
-    transition: shouldApplyTransform ? transition : undefined,
-    opacity: isDragging ? 0 : 1,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
   } as React.CSSProperties;
 
   const renderIcon = () => {
@@ -419,6 +338,92 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   
   // 使用 gridItemIds 作为 SortableContext 的 items（这样拖拽时会实时更新）
   const itemIds = useMemo(() => gridItemIds.length > 0 ? gridItemIds : gridItems.map(item => item.id), [gridItemIds, gridItems]);
+
+  // 跟踪文件夹预览目标
+  const [folderPreviewTargetId, setFolderPreviewTargetId] = useState<string | null>(null);
+
+  // 监听拖拽事件，判断是否应该显示文件夹预览
+  // useDndMonitor({
+  //   onDragMove(event) {
+  //     const { over, active } = event;
+      
+  //     if (!over || !active) {
+  //       setFolderPreviewTargetId(null);
+  //       return;
+  //     }
+      
+  //     // 如果拖拽的是同一个元素，不显示预览
+  //     if (over.id === active.id) {
+  //       setFolderPreviewTargetId(null);
+  //       return;
+  //     }
+      
+  //     // 检查 over 目标（可以是文件夹或普通图标）
+  //     const overItem = currentItems.find(item => item.id === over.id);
+  //     if (!overItem) {
+  //       setFolderPreviewTargetId(null);
+  //       return;
+  //     }
+      
+  //     // 获取位置信息
+  //     const activeRect = active.rect.current.translated;
+  //     const overRect = over.rect;
+      
+  //     if (!activeRect || !overRect) {
+  //       setFolderPreviewTargetId(null);
+  //       return;
+  //     }
+      
+  //     // 判断是否在同一行
+  //     const isSameRow = Math.abs(activeRect.top - overRect.top) < overRect.height / 2;
+      
+  //     if (!isSameRow) {
+  //       setFolderPreviewTargetId(null);
+  //       return;
+  //     }
+      
+  //     // 计算中心点
+  //     const activeCenterX = activeRect.left + activeRect.width / 2;
+  //     const activeCenterY = activeRect.top + activeRect.height / 2;
+      
+  //     // 定义边缘区域
+  //     const leftEdge = overRect.left + overRect.width / 4;
+  //     const rightEdge = overRect.right - overRect.width / 4;
+  //     const topEdge = overRect.top + overRect.height / 4;
+  //     const bottomEdge = overRect.bottom - overRect.height / 4;
+      
+  //     // 判断是否在中间区域或上下边缘（创建文件夹）
+  //     const isInCenterX = activeCenterX >= leftEdge && activeCenterX <= rightEdge;
+  //     const isInCenterY = activeCenterY >= topEdge && activeCenterY <= bottomEdge;
+  //     const isTouchingVerticalEdge = activeCenterY < topEdge || activeCenterY > bottomEdge;
+      
+  //     // 中间区域或上下边缘都显示预览
+  //     const shouldShowPreview = (isInCenterX && isInCenterY) || isTouchingVerticalEdge;
+      
+  //     console.log('[DragMove Preview]', {
+  //       active: active.id,
+  //       over: over.id,
+  //       activeCenterX: Math.round(activeCenterX),
+  //       activeCenterY: Math.round(activeCenterY),
+  //       leftEdge: Math.round(leftEdge),
+  //       rightEdge: Math.round(rightEdge),
+  //       topEdge: Math.round(topEdge),
+  //       bottomEdge: Math.round(bottomEdge),
+  //       isInCenterX,
+  //       isInCenterY,
+  //       isTouchingVerticalEdge,
+  //       shouldShowPreview,
+  //     });
+      
+  //     setFolderPreviewTargetId(shouldShowPreview ? over.id as string : null);
+  //   },
+  //   onDragEnd() {
+  //     setFolderPreviewTargetId(null);
+  //   },
+  //   onDragCancel() {
+  //     setFolderPreviewTargetId(null);
+  //   },
+  // });
 
 
 
@@ -759,7 +764,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
   return (
     <>
       <div className="w-full overflow-visible p-2" ref={setGridDroppableRef}>
-        <SortableContext items={itemIds} >
+        <SortableContext items={itemIds} strategy={customRectSorting} >
           <div
             className={cn(
               "grid w-full overflow-visible",
@@ -772,21 +777,22 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
             }}
           >
             {currentItems.map((item) => {
-              if (isFolder(item)) {
-                return (
-                  <FolderItemComponent
-                    key={item.id}
-                    folder={item}
-                    openInNewTab={openInNewTab}
-                    iconStyle={iconStyle}
-                    nameMaxWidth={nameMaxWidth}
-                    onDelete={handleDelete}
-                    onEdit={handleFolderEdit}
-                    onRemoveItem={handleRemoveFromFolder}
-                    onOpenItem={handleOpenFolderItem}
-                  />
-                );
-              }
+              // if (isFolder(item)) {
+              //   return (
+              //     <FolderItemComponent
+              //       key={item.id}
+              //       folder={item}
+              //       openInNewTab={openInNewTab}
+              //       iconStyle={iconStyle}
+              //       nameMaxWidth={nameMaxWidth}
+              //       onDelete={handleDelete}
+              //       onEdit={handleFolderEdit}
+              //       onRemoveItem={handleRemoveFromFolder}
+              //       onOpenItem={handleOpenFolderItem}
+              //       isFolderPreviewTarget={folderPreviewTargetId === item.id}
+              //     />
+              //   );
+              // }
               return (
                 <DraggableItem
                   key={item.id}
@@ -796,7 +802,7 @@ export const DraggableGrid = ({ openInNewTab: initialOpenInNewTab = true, iconSt
                   nameMaxWidth={nameMaxWidth}
                   onDelete={handleDelete}
                   onEdit={handleEdit}
-                  isFolderPreviewTarget={false}
+                  isFolderPreviewTarget={folderPreviewTargetId === item.id}
                 />
               );
             })}

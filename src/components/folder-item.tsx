@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
 import type { FolderItem, IconItem } from "@/lib/grid-model";
 import * as Portal from "@radix-ui/react-portal";
+import { cn } from "@/lib/utils";
 
 
 interface FolderItemProps {
@@ -26,6 +27,7 @@ interface FolderItemProps {
   onEdit: (folder: FolderItem) => void;
   onRemoveItem: (folderId: string, itemId: string) => void;
   onOpenItem: (item: IconItem) => void;
+  isFolderPreviewTarget?: boolean;
 }
 
 // 文件夹图标预览 - 显示前4个图标的缩略图
@@ -192,6 +194,7 @@ export const FolderItemComponent = ({
   onEdit,
   onRemoveItem,
   onOpenItem,
+  isFolderPreviewTarget = false,
 }: FolderItemProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [folderItems, setFolderItems] = useState(folder.items);
@@ -332,7 +335,13 @@ export const FolderItemComponent = ({
           }
         }}
       >
-        <div style={{ width: `${iconSize}px`, height: `${iconSize}px` }}>
+        <div 
+          className={cn(
+            "transition-all duration-300",
+            isFolderPreviewTarget && "ring-4 ring-blue-400/80 rounded-xl scale-105"
+          )}
+          style={{ width: `${iconSize}px`, height: `${iconSize}px` }}
+        >
           <FolderPreview items={folder.items} size={iconSize} />
         </div>
         {showName && !isDragging && (

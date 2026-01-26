@@ -18,6 +18,7 @@ import { closestCenter } from "@dnd-kit/core";
 import { useGridStore } from "@/lib/grid-store";
 import builtinIcons from "@/json/index";
 import type { GridItem } from "@/lib/grid-model";
+import { isFolder, isIcon, createFolder } from "@/lib/grid-model";
 
 
 
@@ -125,7 +126,6 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
   }, [initialize, initialGridItems, gridItems]);
 
   const switchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSwapDecisionRef = useRef<{ active: string; over: string; shouldSwap: boolean } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -133,7 +133,6 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     })
   );
 
-  // 直接在组件中定义 drag handlers，可以访问最新的 store 状态
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   }, [setActiveId]);
@@ -144,96 +143,34 @@ export default function Home({ avatarUrl, hasSecretKey, sidebarItems, openInNewT
     if (!over) return;
     if (active.id === over.id) return;
 
-    // 获取拖拽元素和目标元素的位置信息
-    const activeRect = active.rect.current.translated;
-    const overRect = over.rect;
-
-    if (!activeRect || !overRect) return;
-
-    // 判断是否在同一行（Y 坐标差距小于元素高度的一半）
-    const isSameRow = Math.abs(activeRect.top - overRect.top) < overRect.height / 2;
-
-    // 判断碰撞方向
-    const isFromLeft = activeRect.left < overRect.left;
-
-    console.log('[DragOver]', {
-      active: active.id,
-      over: over.id,
-      isSameRow,
-      collisionDirection: isFromLeft ? '从左边' : '从右边',
-      activePos: { x: Math.round(activeRect.left), y: Math.round(activeRect.top) },
-      overPos: { x: Math.round(overRect.left), y: Math.round(overRect.top) },
+    // 只更新 gridItemIds 顺序，不触发 gridItems 的重新计算
+    // dnd-kit 会通过 transform 自动处理视觉位置
+    setGridItemIds((ids: string[]) => {
+      const oldIndex = ids.indexOf(active.id as string);
+      const newIndex = ids.indexOf(over.id as string);
+      
+      if (oldIndex === newIndex) return ids;
+      
+      return arrayMove(ids, oldIndex, newIndex);
     });
-
-    // 只在同一行时才更新顺序（这会影响 useSortable 的 transform 计算）
-    if (!isSameRow) {
-      console.log('[DragOver] 不在同一行，不交换');
-      return;
-    }
-
-    // 更新 items 顺序 → SortableContext 会重新计算 transform
-    // setGridItemIds((ids: string[]) => {
-    //   const oldIndex = ids.indexOf(active.id as string);
-    //   const newIndex = ids.indexOf(over.id as string) + 1;
-      
-    //   if (oldIndex === newIndex) return ids;
-      
-    //   console.log('[DragOver] 交换顺序:', active.id, '↔', over.id);
-    //   return arrayMove(ids, oldIndex, newIndex);
-    // });
   }, [setGridItemIds]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    
     setActiveId(null);
-
-    const { over, active } = event;
-
-    if (!over) return;
-    if (active.id === over.id) return;
-
-      // 获取位置信息
-    const activeRect = active.rect.current.translated;
-    const overRect = over.rect;
     
-    // 计算中心点
-    const activeCenterX = activeRect.left + activeRect.width / 2;
-    const overCenterX = overRect.left + overRect.width / 2;
+    if (!over || active.id === over.id) return;
     
-    // 判断目标元素在左边还是右边
-    const isOverOnLeft = overCenterX < activeCenterX;  // true = 左边, false = 右边
-
-    
-    // 满足条件，执行交换
-    setGridItemIds((ids: string[]) => {
-      const oldIndex = ids.indexOf(active.id as string);
-      let newIndex = ids.indexOf(over.id as string) ;
-      
-      // if(isOverOnLeft) {
-      //   newIndex++;
-      // } else {
-      //   newIndex--;
-      // }
-
-      if (oldIndex === newIndex) return ids;
-      
-      console.log('[DragEnd] 交换顺序:', active.id, '↔', over.id);
-      return arrayMove(ids, oldIndex, newIndex);
-    });
-
-    // 直接从 store 获取最新的 gridItemIds
+    // DragEnd 时同步 gridItems（保持数据一致性）
     const { gridItemIds: latestIds, gridItems: latestItems } = useGridStore.getState();
-    
-    console.log('[DragEnd] 使用最新的 gridItemIds:', latestIds);
-    
-    // 根据最新的 gridItemIds 重新排列 gridItems
     const itemMap = new Map(latestItems.map((item: GridItem) => [item.id, item]));
     const reorderedItems = latestIds
       .map((id: string) => itemMap.get(id))
       .filter((item): item is GridItem => item !== undefined);
     
-    console.log('[DragEnd] 更新完整数据，保存到服务器');
     setGridItems(reorderedItems);
-  }, [setActiveId, setGridItems, setGridItemIds]);
+  }, [setActiveId, setGridItems]);
 
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
