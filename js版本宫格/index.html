@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<link rel="icon" type="image/png" href="st/og-image.png">
+	<title>SortableJS</title>
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
+	<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.6.3/css/all.css" integrity="sha384-UHRtZLI+pbxtHCWp1t77Bi1L4ZtiqrqD80Kn4Z8NTSRyMA2Fd33n5dQ8lWUE00s/" crossorigin="anonymous">
+	<link rel="stylesheet" type="text/css" href="st/theme.css">
+
+	<meta charset="utf-8"/>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+	<meta property="og:image" content="/st/og-image.png"/>
+	<meta name="keywords" content="sortable, reorder, list, javascript, html5, drag and drop, dnd, animation, groups, dnd, sortableJS"/>
+	<meta name="description" content="Sortable — is a JavaScript library for reorderable drag-and-drop lists on modern browsers and touch devices. No jQuery required. Supports Meteor, AngularJS, React, Polymer, Vue, Knockout and any CSS library, e.g. Bootstrap."/>
+	<meta name="viewport" content="width=device-width, initial-scale=0.5"/>
+</head>
+<body>
+
+	<a href="https://github.com/SortableJS/Sortable"><img style="position: fixed; top: 0; right: 0; border: 0; z-index:99999" src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"></a>
+
+	<div class="container">
+		<div class="text-center row header">
+			<img class="mx-auto d-block" src="st/og-image.png" style="max-width: 200px; max-height: 200px" />
+			<h1 class="col-12">SortableJS</h1>
+			<h3 class="col-12 text-center">JavaScript library for reorderable drag-and-drop lists</h3>
+		</div>
+
+		<div class="row">
+			<h2 class="col-12">Grid Example</h2>
+		</div>
+		<hr />
+
+		<div id="grid" class="row">
+			<div id="gridDemo" class="col">
+				<div class="grid-square">Item 1</div><!--
+			 --><div class="grid-square">Item 2</div><!--
+			 --><div class="grid-square">Item 3</div><!--
+			 --><div class="grid-square">Item 4</div><!--
+			 --><div class="grid-square">Item 5</div><!--
+			 --><div class="grid-square">Item 6</div><!--
+			 --><div class="grid-square">Item 7</div><!--
+			 --><div class="grid-square">Item 8</div><!--
+			 --><div class="grid-square">Item 9</div><!--
+			 --><div class="grid-square">Item 10</div><!--
+			 --><div class="grid-square">Item 11</div><!--
+			 --><div class="grid-square">Item 12</div><!--
+			 --><div class="grid-square">Item 13</div><!--
+			 --><div class="grid-square">Item 14</div><!--
+			 --><div class="grid-square">Item 15</div><!--
+			 --><div class="grid-square">Item 16</div><!--
+			 --><div class="grid-square">Item 17</div><!--
+			 --><div class="grid-square">Item 18</div><!--
+			 --><div class="grid-square">Item 19</div><!--
+			 --><div class="grid-square">Item 20</div>
+			</div>
+			<div style="padding: 0" class="col-12 mt-3">
+				<div class="alert alert-info">
+					<strong>拖拽合并功能：</strong>
+					<ul class="mb-0">
+						<li><strong>拖到左侧元素</strong>：
+							<ul>
+								<li>拖到左边缘（左侧33%）：避让交换位置</li>
+								<li>拖到右边缘和中间：目标元素高亮，松开后合并为 "目标 、拖动"，原元素消失</li>
+							</ul>
+						</li>
+						<li><strong>拖到右侧元素</strong>：
+							<ul>
+								<li>拖到右边缘（右侧33%）：避让交换位置</li>
+								<li>拖到左边缘和中间：目标元素高亮，松开后合并为 "拖动 、目标"，原元素消失</li>
+							</ul>
+						</li>
+					</ul>
+				</div>
+			</div>
+			<div style="padding: 0" class="col-12">
+<pre class="prettyprint">new Sortable(gridDemo, {
+    animation: 150,
+    ghostClass: 'blue-background-class',
+    onMove: function(evt, originalEvent) {
+        // 自定义合并和交换逻辑
+        // 拖到边缘：避让交换
+        // 拖到中间：高亮准备合并
+    },
+    onEnd: function(evt) {
+        // 松开时执行合并操作
+    }
+});</pre>
+			</div>
+		</div>
+
+	</div>
+
+
+	<!-- 弹窗模态框 -->
+	<div id="folderModal" class="modal-overlay" style="display: none;">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3 id="modalTitle">文件夹内容</h3>
+				<button class="modal-close" onclick="closeFolderModal()">&times;</button>
+			</div>
+			<div class="modal-body">
+				<div id="modalGridDemo" class="modal-grid">
+					<!-- 动态生成的网格项 -->
+				</div>
+			</div>
+		</div>
+	</div>
+
+
+	<!-- Latest Sortable -->
+	<script src="./Sortable.js"></script>
+
+	<script type="text/javascript" src="st/prettify/prettify.js"></script>
+	<script type="text/javascript" src="st/prettify/run_prettify.js"></script>
+
+	<script src="st/app.js"></script>
+</body>
+</html>
