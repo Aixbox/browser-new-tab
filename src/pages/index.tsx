@@ -1,6 +1,7 @@
+import { useEffect, useMemo } from "react";
 import Head from "next/head";
 import { KVNamespace } from "@cloudflare/workers-types";
-import { MinimalLayout, SidebarWrapper } from "@/components/home";
+import { ComponentLayout, MinimalLayout, SidebarWrapper } from "@/components/home";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
@@ -13,6 +14,9 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { useSyncListeners } from "@/hooks/use-sync-listeners";
 import { usePreloadAssets } from "@/hooks/use-preload-assets";
+import { useGridStore } from "@/lib/grid-store";
+import type { GridItem } from "@/lib/grid-model";
+import builtinIcons from "@/json/index";
 
 // 使用 Edge Runtime
 export const config = {
@@ -28,6 +32,7 @@ interface HomeProps {
   iconStyle: IconStyleSettings;
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
+  iconItems: GridItem[] | null;
   searchEngines: any[] | null;
   selectedEngine: string | null;
 }
@@ -41,6 +46,7 @@ export default function Home({
   iconStyle, 
   backgroundUrl, 
   sidebarSettings,
+  iconItems,
   searchEngines, 
   selectedEngine 
 }: HomeProps) {
@@ -49,6 +55,7 @@ export default function Home({
     setIsSettingsOpen,
     currentLayoutMode,
     setCurrentLayoutMode,
+    currentIconStyle,
     setCurrentIconStyle,
     currentBackgroundUrl,
     setCurrentBackgroundUrl,
@@ -67,6 +74,58 @@ export default function Home({
     sidebarItems,
   });
 
+  const {
+    gridItems,
+    setGridItems,
+    initialize,
+  } = useGridStore();
+
+  // 初始化图标数据
+  const baseTime = useMemo(() => Date.now(), []);
+  const initialGridItems = useMemo<GridItem[]>(() => {
+    if (iconItems && iconItems.length > 0) {
+      return iconItems as GridItem[];
+    }
+
+    const fallbackIcons: GridItem[] = builtinIcons.map((item, index) => ({
+      ...item,
+      iconType: item.iconType as "logo" | "image" | "text",
+      id: `${item.id}-${baseTime}-${index}`,
+    }));
+
+    return fallbackIcons;
+  }, [baseTime, iconItems]);
+
+  useEffect(() => {
+    if (gridItems.length === 0) {
+      initialize(initialGridItems);
+    }
+  }, [initialize, initialGridItems, gridItems]);
+
+  // 监听 gridItems 变化，保存到服务器
+  useEffect(() => {
+    if (gridItems.length === 0) return;
+    
+    const saveToServer = async () => {
+      try {
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            key: "icon_items",
+            value: JSON.stringify(gridItems),
+          }),
+        });
+        const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
+        await updateRemoteTimestamp("gridIcons");
+      } catch (error) {
+        console.error("Failed to save grid items:", error);
+      }
+    };
+    
+    saveToServer();
+  }, [gridItems]);
+
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
   const { contextMenuPosition, handleContextMenu, closeContextMenu } = useContextMenu();
@@ -80,7 +139,7 @@ export default function Home({
   });
 
   usePreloadAssets({
-    gridItems: [],
+    gridItems,
     avatarUrl,
   });
 
@@ -114,11 +173,30 @@ export default function Home({
         )}
 
         {/* 主内容区域 */}
-        <MinimalLayout
-          openInNewTab={openInNewTab}
-          searchEngines={searchEngines}
-          selectedEngine={selectedEngine}
-        />
+        {currentLayoutMode === "component" ? (
+          <ComponentLayout
+            avatarUrl={avatarUrl}
+            sidebarItems={sidebarItems}
+            openInNewTab={openInNewTab}
+            searchEngines={searchEngines}
+            selectedEngine={selectedEngine}
+            currentSidebarSettings={currentSidebarSettings}
+            isSidebarVisible={isSidebarVisible}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onPageChange={setCurrentPageId}
+            currentPageId={currentPageId}
+            onSidebarItemsChange={setCurrentSidebarItems}
+            currentIconStyle={currentIconStyle}
+            gridItems={gridItems}
+            onGridItemsChange={setGridItems}
+          />
+        ) : (
+          <MinimalLayout
+            openInNewTab={openInNewTab}
+            searchEngines={searchEngines}
+            selectedEngine={selectedEngine}
+          />
+        )}
 
         {/* 右键菜单 */}
         {contextMenuPosition && (
@@ -240,6 +318,17 @@ export async function getServerSideProps() {
 
       const selectedEngine = await NEWTAB_KV.get('selected_engine');
 
+      // 读取图标数据
+      const iconItemsStr = await NEWTAB_KV.get('icon_items');
+      let iconItems: any[] | null = null;
+      if (iconItemsStr) {
+        try {
+          iconItems = JSON.parse(iconItemsStr);
+        } catch (error) {
+          console.error('Failed to parse icon items:', error);
+        }
+      }
+
       return {
         props: {
           avatarUrl,
@@ -250,6 +339,7 @@ export async function getServerSideProps() {
           iconStyle,
           backgroundUrl,
           sidebarSettings,
+          iconItems,
           searchEngines,
           selectedEngine,
         },
@@ -269,6 +359,7 @@ export async function getServerSideProps() {
       iconStyle,
       backgroundUrl,
       sidebarSettings,
+      iconItems: null,
       searchEngines: null,
       selectedEngine: null,
     },
