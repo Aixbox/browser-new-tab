@@ -233,11 +233,12 @@ input[type="range"].slider::-moz-range-thumb:hover {
 }
 
 /* Sortable 拖拽样式 */
+/* 原位置的幽灵元素（ghost）- 半透明 */
 .blue-background-class {
-  opacity: 0.5;
+  opacity: 0 !important;
 }
 
+/* 正在拖拽的元素 - 保持完全不透明 */
 .dragging-element {
-  opacity: 0.8;
-  transform: scale(1.05);
+  opacity: 1 !important;
 }

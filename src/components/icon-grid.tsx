@@ -353,6 +353,8 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
           delay={0}
           delayOnTouchOnly={true}
           touchStartThreshold={5}
+          ghostClass="blue-background-class"
+          dragClass="dragging-element"
           onMove={handleSortableMove}
           onEnd={handleSortableEnd}
           className={cn(
@@ -388,6 +390,8 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
               list={folderItems.map((item) => ({ ...item, chosen: false, selected: false }))}
               setList={handleFolderItemsChange}
               animation={200}
+              ghostClass="blue-background-class"
+              dragClass="dragging-element"
               className={cn(
                 "grid gap-4"
               )}
