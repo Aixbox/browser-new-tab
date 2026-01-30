@@ -171,8 +171,70 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
 
     updateColumns();
     window.addEventListener("resize", updateColumns);
+    
+    // 全局拖拽事件监听
+    const handleDragOver = (e: DragEvent) => {
+      if (!openFolder) return;
+      
+      // 获取弹窗内容区域
+      const dialogContent = document.querySelector('[role="dialog"]');
+      if (!dialogContent) return;
+      
+      const rect = dialogContent.getBoundingClientRect();
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+      
+      // 检查鼠标是否在弹窗外（遮罩区域）
+      const isOutside = mouseX < rect.left || mouseX > rect.right || 
+                        mouseY < rect.top || mouseY > rect.bottom;
+      
+      if (isOutside) {
+        // 鼠标在遮罩区域
+        if (!overlayHoverStateRef.current.isHovering) {
+          overlayHoverStateRef.current.isHovering = true;
+          overlayHoverStateRef.current.hoverStartTime = Date.now();
+          
+          console.log('🎯 开始悬停在遮罩区域');
+          
+          // 设置1秒后关闭弹窗
+          overlayHoverStateRef.current.hoverTimer = setTimeout(() => {
+            console.log('🚪 关闭文件夹弹窗（拖拽中）');
+            setOpenFolder(null);
+            overlayHoverStateRef.current.isHovering = false;
+          }, 1000);
+        }
+      } else {
+        // 鼠标回到弹窗内
+        if (overlayHoverStateRef.current.hoverTimer) {
+          console.log('❌ 取消关闭弹窗');
+          clearTimeout(overlayHoverStateRef.current.hoverTimer);
+          overlayHoverStateRef.current.hoverTimer = null;
+        }
+        overlayHoverStateRef.current.isHovering = false;
+        overlayHoverStateRef.current.hoverStartTime = null;
+      }
+    };
+    
+    const handleDragEnd = () => {
+      // 拖拽结束，清理状态
+      if (overlayHoverStateRef.current.hoverTimer) {
+        clearTimeout(overlayHoverStateRef.current.hoverTimer);
+        overlayHoverStateRef.current.hoverTimer = null;
+      }
+      overlayHoverStateRef.current.isHovering = false;
+      overlayHoverStateRef.current.hoverStartTime = null;
+      console.log('📍 拖拽结束');
+    };
+    
+    // 添加全局事件监听
+    document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('dragend', handleDragEnd);
+    
     return () => {
       window.removeEventListener("resize", updateColumns);
+      document.removeEventListener('dragover', handleDragOver);
+      document.removeEventListener('dragend', handleDragEnd);
+      
       // 清理定时器
       if (folderHoverStateRef.current.hoverTimer) {
         clearTimeout(folderHoverStateRef.current.hoverTimer);
@@ -181,7 +243,7 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         clearTimeout(overlayHoverStateRef.current.hoverTimer);
       }
     };
-  }, [iconStyle.size, iconStyle.spacing]);
+  }, [iconStyle.size, iconStyle.spacing, openFolder]);
 
   const handleFolderClick = (folder: GridItem) => {
     if (isFolder(folder)) {
@@ -192,39 +254,6 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
 
   const handleFolderItemsChange = (newItems: IconItem[]) => {
     setFolderItems(newItems);
-  };
-
-  // 处理文件夹内拖拽的 onMove 事件
-  const handleFolderSortableMove = (evt: Sortable.MoveEvent) => {
-    // 检查是否拖到了弹窗外部
-    const related = evt.related;
-    
-    if (!related) {
-      // 拖到容器外部，开始计时
-      if (!overlayHoverStateRef.current.isHovering) {
-        overlayHoverStateRef.current.isHovering = true;
-        overlayHoverStateRef.current.hoverStartTime = Date.now();
-        
-        console.log('🎯 开始悬停在遮罩区域');
-        
-        // 设置1秒后关闭弹窗
-        overlayHoverStateRef.current.hoverTimer = setTimeout(() => {
-          console.log('🚪 关闭文件夹弹窗');
-          handleCloseFolderModal();
-        }, 1000);
-      }
-      return true;
-    } else {
-      // 拖回容器内部，取消计时
-      if (overlayHoverStateRef.current.hoverTimer) {
-        console.log('❌ 取消关闭弹窗');
-        clearTimeout(overlayHoverStateRef.current.hoverTimer);
-        overlayHoverStateRef.current.hoverTimer = null;
-      }
-      overlayHoverStateRef.current.isHovering = false;
-      overlayHoverStateRef.current.hoverStartTime = null;
-      return true;
-    }
   };
 
   const handleCloseFolderModal = () => {
@@ -619,7 +648,6 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
               animation={200}
               ghostClass="blue-background-class"
               dragClass="dragging-element"
-              onMove={handleFolderSortableMove}
               className={cn(
                 "grid gap-4 p-4"
               )}
