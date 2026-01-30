@@ -146,6 +146,20 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
     highlightedElement: null as HTMLElement | null,
   });
 
+  // 文件夹悬停状态
+  const folderHoverStateRef = useRef({
+    hoveredFolder: null as GridItem | null,
+    hoverStartTime: null as number | null,
+    hoverTimer: null as NodeJS.Timeout | null,
+  });
+
+  // 弹窗遮罩悬停状态
+  const overlayHoverStateRef = useRef({
+    isHovering: false,
+    hoverStartTime: null as number | null,
+    hoverTimer: null as NodeJS.Timeout | null,
+  });
+
   useEffect(() => {
     const updateColumns = () => {
       if (!gridRef.current) return;
@@ -157,7 +171,16 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
 
     updateColumns();
     window.addEventListener("resize", updateColumns);
-    return () => window.removeEventListener("resize", updateColumns);
+    return () => {
+      window.removeEventListener("resize", updateColumns);
+      // 清理定时器
+      if (folderHoverStateRef.current.hoverTimer) {
+        clearTimeout(folderHoverStateRef.current.hoverTimer);
+      }
+      if (overlayHoverStateRef.current.hoverTimer) {
+        clearTimeout(overlayHoverStateRef.current.hoverTimer);
+      }
+    };
   }, [iconStyle.size, iconStyle.spacing]);
 
   const handleFolderClick = (folder: GridItem) => {
@@ -169,6 +192,39 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
 
   const handleFolderItemsChange = (newItems: IconItem[]) => {
     setFolderItems(newItems);
+  };
+
+  // 处理文件夹内拖拽的 onMove 事件
+  const handleFolderSortableMove = (evt: Sortable.MoveEvent) => {
+    // 检查是否拖到了弹窗外部
+    const related = evt.related;
+    
+    if (!related) {
+      // 拖到容器外部，开始计时
+      if (!overlayHoverStateRef.current.isHovering) {
+        overlayHoverStateRef.current.isHovering = true;
+        overlayHoverStateRef.current.hoverStartTime = Date.now();
+        
+        console.log('🎯 开始悬停在遮罩区域');
+        
+        // 设置1秒后关闭弹窗
+        overlayHoverStateRef.current.hoverTimer = setTimeout(() => {
+          console.log('🚪 关闭文件夹弹窗');
+          handleCloseFolderModal();
+        }, 1000);
+      }
+      return true;
+    } else {
+      // 拖回容器内部，取消计时
+      if (overlayHoverStateRef.current.hoverTimer) {
+        console.log('❌ 取消关闭弹窗');
+        clearTimeout(overlayHoverStateRef.current.hoverTimer);
+        overlayHoverStateRef.current.hoverTimer = null;
+      }
+      overlayHoverStateRef.current.isHovering = false;
+      overlayHoverStateRef.current.hoverStartTime = null;
+      return true;
+    }
   };
 
   const handleCloseFolderModal = () => {
@@ -206,6 +262,15 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         mergeStateRef.current.highlightedElement = null;
       }
       mergeStateRef.current.mergeMode = false;
+      
+      // 清理文件夹悬停状态
+      if (folderHoverStateRef.current.hoverTimer) {
+        clearTimeout(folderHoverStateRef.current.hoverTimer);
+        folderHoverStateRef.current.hoverTimer = null;
+      }
+      folderHoverStateRef.current.hoveredFolder = null;
+      folderHoverStateRef.current.hoverStartTime = null;
+      
       return true;
     }
     
@@ -243,12 +308,24 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
       mergeStateRef.current.highlightedElement = null;
     }
     
+    // 检查是否悬停在文件夹上
+    const targetId = related.dataset.id;
+    const targetItem = items.find(item => item.id === targetId);
+    
     if (isTargetOnLeft) {
       if (isMouseInLeftZone) {
         // 拖到左边缘：避让（交换）
         mergeStateRef.current.mergeMode = false;
         related.classList.remove('merge-highlight');
         mergeStateRef.current.highlightedElement = null;
+        
+        // 清理文件夹悬停
+        if (folderHoverStateRef.current.hoverTimer) {
+          clearTimeout(folderHoverStateRef.current.hoverTimer);
+          folderHoverStateRef.current.hoverTimer = null;
+        }
+        folderHoverStateRef.current.hoveredFolder = null;
+        
         return -1;
       } else {
         // 拖到右边缘和中间
@@ -260,13 +337,56 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
           mergeStateRef.current.mergeMode = false;
           related.classList.remove('merge-highlight');
           mergeStateRef.current.highlightedElement = null;
+          
+          // 清理文件夹悬停
+          if (folderHoverStateRef.current.hoverTimer) {
+            clearTimeout(folderHoverStateRef.current.hoverTimer);
+            folderHoverStateRef.current.hoverTimer = null;
+          }
+          folderHoverStateRef.current.hoveredFolder = null;
+          
           return false;
         } else {
-          mergeStateRef.current.mergeMode = true;
-          mergeStateRef.current.mergePosition = 'after';
-          related.classList.add('merge-highlight');
-          mergeStateRef.current.highlightedElement = related;
-          return false;
+          // 检查是否是文件夹
+          if (targetItem && isFolder(targetItem)) {
+            // 悬停在文件夹上
+            if (folderHoverStateRef.current.hoveredFolder?.id !== targetItem.id) {
+              // 切换到新文件夹，重置计时器
+              if (folderHoverStateRef.current.hoverTimer) {
+                clearTimeout(folderHoverStateRef.current.hoverTimer);
+              }
+              
+              folderHoverStateRef.current.hoveredFolder = targetItem;
+              folderHoverStateRef.current.hoverStartTime = Date.now();
+              
+              // 设置1秒后打开文件夹
+              folderHoverStateRef.current.hoverTimer = setTimeout(() => {
+                console.log('🗂️ 打开文件夹:', targetItem.name);
+                handleFolderClick(targetItem);
+              }, 1000);
+            }
+            
+            // 不触发合并
+            mergeStateRef.current.mergeMode = false;
+            related.classList.remove('merge-highlight');
+            mergeStateRef.current.highlightedElement = null;
+            return false;
+          } else {
+            // 普通图标，触发合并
+            mergeStateRef.current.mergeMode = true;
+            mergeStateRef.current.mergePosition = 'after';
+            related.classList.add('merge-highlight');
+            mergeStateRef.current.highlightedElement = related;
+            
+            // 清理文件夹悬停
+            if (folderHoverStateRef.current.hoverTimer) {
+              clearTimeout(folderHoverStateRef.current.hoverTimer);
+              folderHoverStateRef.current.hoverTimer = null;
+            }
+            folderHoverStateRef.current.hoveredFolder = null;
+            
+            return false;
+          }
         }
       }
     } else if (isTargetOnRight) {
@@ -275,6 +395,14 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         mergeStateRef.current.mergeMode = false;
         related.classList.remove('merge-highlight');
         mergeStateRef.current.highlightedElement = null;
+        
+        // 清理文件夹悬停
+        if (folderHoverStateRef.current.hoverTimer) {
+          clearTimeout(folderHoverStateRef.current.hoverTimer);
+          folderHoverStateRef.current.hoverTimer = null;
+        }
+        folderHoverStateRef.current.hoveredFolder = null;
+        
         return 1;
       } else {
         // 拖到左边缘和中间
@@ -286,22 +414,81 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
           mergeStateRef.current.mergeMode = false;
           related.classList.remove('merge-highlight');
           mergeStateRef.current.highlightedElement = null;
+          
+          // 清理文件夹悬停
+          if (folderHoverStateRef.current.hoverTimer) {
+            clearTimeout(folderHoverStateRef.current.hoverTimer);
+            folderHoverStateRef.current.hoverTimer = null;
+          }
+          folderHoverStateRef.current.hoveredFolder = null;
+          
           return false;
         } else {
-          mergeStateRef.current.mergeMode = true;
-          mergeStateRef.current.mergePosition = 'before';
-          related.classList.add('merge-highlight');
-          mergeStateRef.current.highlightedElement = related;
-          return false;
+          // 检查是否是文件夹
+          if (targetItem && isFolder(targetItem)) {
+            // 悬停在文件夹上
+            if (folderHoverStateRef.current.hoveredFolder?.id !== targetItem.id) {
+              // 切换到新文件夹，重置计时器
+              if (folderHoverStateRef.current.hoverTimer) {
+                clearTimeout(folderHoverStateRef.current.hoverTimer);
+              }
+              
+              folderHoverStateRef.current.hoveredFolder = targetItem;
+              folderHoverStateRef.current.hoverStartTime = Date.now();
+              
+              // 设置1秒后打开文件夹
+              folderHoverStateRef.current.hoverTimer = setTimeout(() => {
+                console.log('🗂️ 打开文件夹:', targetItem.name);
+                handleFolderClick(targetItem);
+              }, 1000);
+            }
+            
+            // 不触发合并
+            mergeStateRef.current.mergeMode = false;
+            related.classList.remove('merge-highlight');
+            mergeStateRef.current.highlightedElement = null;
+            return false;
+          } else {
+            // 普通图标，触发合并
+            mergeStateRef.current.mergeMode = true;
+            mergeStateRef.current.mergePosition = 'before';
+            related.classList.add('merge-highlight');
+            mergeStateRef.current.highlightedElement = related;
+            
+            // 清理文件夹悬停
+            if (folderHoverStateRef.current.hoverTimer) {
+              clearTimeout(folderHoverStateRef.current.hoverTimer);
+              folderHoverStateRef.current.hoverTimer = null;
+            }
+            folderHoverStateRef.current.hoveredFolder = null;
+            
+            return false;
+          }
         }
       }
     }
     
     mergeStateRef.current.mergeMode = false;
+    
+    // 清理文件夹悬停
+    if (folderHoverStateRef.current.hoverTimer) {
+      clearTimeout(folderHoverStateRef.current.hoverTimer);
+      folderHoverStateRef.current.hoverTimer = null;
+    }
+    folderHoverStateRef.current.hoveredFolder = null;
+    
     return true;
   };
 
   const handleSortableEnd = (evt: Sortable.SortableEvent) => {
+    // 清理文件夹悬停定时器
+    if (folderHoverStateRef.current.hoverTimer) {
+      clearTimeout(folderHoverStateRef.current.hoverTimer);
+      folderHoverStateRef.current.hoverTimer = null;
+    }
+    folderHoverStateRef.current.hoveredFolder = null;
+    folderHoverStateRef.current.hoverStartTime = null;
+    
     if (mergeStateRef.current.highlightedElement) {
       mergeStateRef.current.highlightedElement.classList.remove('merge-highlight');
     }
@@ -385,6 +572,7 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
               onItemsChange(newState);
             }
           }}
+          group="icon-grid"
           animation={200}
           delay={0}
           delayOnTouchOnly={true}
@@ -417,7 +605,9 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
 
       {/* 文件夹弹窗 */}
       <Dialog open={!!openFolder} onOpenChange={(open) => !open && handleCloseFolderModal()}>
-        <DialogContent className="max-w-2xl backdrop-blur-xl bg-primary/20 border-2 border-border/50 text-foreground">
+        <DialogContent 
+          className="max-w-2xl backdrop-blur-xl bg-primary/20 border-2 border-border/50 text-foreground"
+        >
           <DialogHeader>
             <DialogTitle className="text-foreground text-xl font-semibold">{openFolder?.name}</DialogTitle>
           </DialogHeader>
@@ -425,9 +615,11 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
             <ReactSortable
               list={folderItems.map((item) => ({ ...item, chosen: false, selected: false }))}
               setList={handleFolderItemsChange}
+              group="icon-grid"
               animation={200}
               ghostClass="blue-background-class"
               dragClass="dragging-element"
+              onMove={handleFolderSortableMove}
               className={cn(
                 "grid gap-4 p-4"
               )}
