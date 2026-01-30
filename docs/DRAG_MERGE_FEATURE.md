@@ -40,6 +40,7 @@
 - 点击文件夹图标
 - 弹出对话框显示文件夹内容
 - 文件夹内的图标以网格形式展示
+- 弹窗使用玻璃态样式（`backdrop-blur-xl bg-primary/20`）
 
 #### 文件夹内拖拽
 - 文件夹弹窗内支持拖拽排序
@@ -53,14 +54,20 @@
 
 ### 3. 视觉反馈
 
+#### 拖拽状态
+- **原位置图标（ghost）**：半透明（opacity: 0.3）
+- **拖动中的图标**：保持完全不透明（opacity: 1）
+
 #### 合并高亮
 - 蓝色边框（rgba(59, 130, 246, 0.8)）
 - 脉冲动画效果
 - 边框会随着拖拽实时更新
 
-#### 拖拽状态
-- 拖拽中的元素：半透明（opacity: 0.8）+ 轻微放大（scale: 1.05）
-- 幽灵元素：半透明（opacity: 0.5）
+#### 文件夹弹窗样式
+- 玻璃态背景：`backdrop-blur-xl bg-primary/20`
+- 边框：`border-2 border-border/50`
+- 文字颜色：`text-foreground`
+- 关闭按钮：白色，半透明
 
 ## 技术实现
 
@@ -73,9 +80,10 @@
 
 2. **onEnd 事件处理**
    - 检查是否处于合并模式
+   - 通过 `highlightedElement.dataset.id` 找到真正的目标元素
    - 提取拖拽元素和目标元素的图标
    - 创建新文件夹
-   - 更新图标列表
+   - 更新图标列表（移除两个原始元素，插入新文件夹）
 
 3. **文件夹管理**
    - 使用 Dialog 组件展示文件夹内容
@@ -159,13 +167,47 @@ const folder = createFolder([icon1, icon2], "我的文件夹");
 }
 
 /* 拖拽状态 */
+/* 原位置的幽灵元素（ghost）- 半透明 */
 .blue-background-class {
-  opacity: 0.5;
+  opacity: 0.3 !important;
 }
 
+/* 正在拖拽的元素 - 保持完全不透明 */
 .dragging-element {
-  opacity: 0.8;
-  transform: scale(1.05);
+  opacity: 1 !important;
+}
+```
+
+## 调试
+
+### 控制台日志
+
+合并操作会输出详细的调试信息：
+
+```
+🔄 合并操作: {
+  draggedItem: "图标A",
+  targetItem: "图标B",
+  draggedIndex: 0,
+  targetIndex: 1,
+  mergePosition: "after"
+}
+
+📦 提取的图标: {
+  draggedIcons: ["图标A"],
+  targetIcons: ["图标B"]
+}
+
+✅ 创建文件夹: {
+  folderName: "图标B",
+  itemCount: 2,
+  items: ["图标B", "图标A"]
+}
+
+📋 更新后的列表: {
+  原始数量: 10,
+  新数量: 9,
+  items: [...]
 }
 ```
 
@@ -184,6 +226,30 @@ const folder = createFolder([icon1, icon2], "我的文件夹");
    - 支持触摸设备
    - 支持键盘操作（ESC关闭弹窗）
    - 支持点击弹窗外部关闭
+
+4. **样式一致性**
+   - 遵循项目设计系统（玻璃态、圆角、阴影）
+   - 文字颜色使用 `text-foreground` 变量
+   - 背景使用 `bg-primary/20` 变量
+
+## 已修复的问题
+
+### 2024-01-30 修复
+
+1. ✅ **拖拽透明度问题**
+   - 原位置图标变透明（opacity: 0.3）
+   - 拖动的图标保持不透明（opacity: 1）
+
+2. ✅ **合并逻辑错误**
+   - 修复了使用 `evt.newIndex` 导致的目标元素错误
+   - 现在通过 `highlightedElement.dataset.id` 正确找到目标元素
+   - 确保两个图标都被移除，只创建一个文件夹
+
+3. ✅ **文件夹弹窗样式问题**
+   - 添加玻璃态背景（`backdrop-blur-xl bg-primary/20`）
+   - 添加边框（`border-2 border-border/50`）
+   - 修复文字颜色（`text-foreground`）
+   - 修复关闭按钮颜色
 
 ## 未来改进
 

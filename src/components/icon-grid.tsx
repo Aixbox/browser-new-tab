@@ -417,11 +417,11 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
 
       {/* 文件夹弹窗 */}
       <Dialog open={!!openFolder} onOpenChange={(open) => !open && handleCloseFolderModal()}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl backdrop-blur-xl bg-primary/20 border-2 border-border/50 text-foreground">
           <DialogHeader>
-            <DialogTitle>{openFolder?.name}</DialogTitle>
+            <DialogTitle className="text-foreground text-xl font-semibold">{openFolder?.name}</DialogTitle>
           </DialogHeader>
-          <div className="mt-4">
+          <div className="mt-4 min-h-[200px]">
             <ReactSortable
               list={folderItems.map((item) => ({ ...item, chosen: false, selected: false }))}
               setList={handleFolderItemsChange}
@@ -429,7 +429,7 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
               ghostClass="blue-background-class"
               dragClass="dragging-element"
               className={cn(
-                "grid gap-4"
+                "grid gap-4 p-4"
               )}
               style={{
                 gridTemplateColumns: `repeat(auto-fill, minmax(${iconStyle.size}px, 1fr))`,
