@@ -306,12 +306,24 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
       mergeStateRef.current.highlightedElement.classList.remove('merge-highlight');
     }
     
-    if (mergeStateRef.current.mergeMode && evt.oldIndex !== undefined && evt.newIndex !== undefined) {
+    if (mergeStateRef.current.mergeMode && evt.oldIndex !== undefined && mergeStateRef.current.highlightedElement) {
       const draggedItem = items[evt.oldIndex];
-      const targetIndex = evt.newIndex;
-      const targetItem = items[targetIndex];
       
-      if (!draggedItem || !targetItem) {
+      // 通过 highlightedElement 的 data-id 找到目标元素
+      const targetId = mergeStateRef.current.highlightedElement.dataset.id;
+      const targetIndex = items.findIndex(item => item.id === targetId);
+      const targetItem = targetIndex >= 0 ? items[targetIndex] : null;
+      
+      console.log('🔄 合并操作:', {
+        draggedItem: draggedItem?.name,
+        targetItem: targetItem?.name,
+        draggedIndex: evt.oldIndex,
+        targetIndex,
+        mergePosition: mergeStateRef.current.mergePosition
+      });
+      
+      if (!draggedItem || !targetItem || targetIndex < 0) {
+        console.error('❌ 合并失败: 找不到拖动或目标元素');
         mergeStateRef.current.mergeMode = false;
         mergeStateRef.current.mergePosition = null;
         mergeStateRef.current.highlightedElement = null;
@@ -322,6 +334,11 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
       const draggedIcons: IconItem[] = isFolder(draggedItem) ? draggedItem.items : [draggedItem];
       const targetIcons: IconItem[] = isFolder(targetItem) ? targetItem.items : [targetItem];
       
+      console.log('📦 提取的图标:', {
+        draggedIcons: draggedIcons.map(i => i.name),
+        targetIcons: targetIcons.map(i => i.name)
+      });
+      
       // 根据合并位置创建新文件夹
       const newFolderItems = mergeStateRef.current.mergePosition === 'before' 
         ? [...draggedIcons, ...targetIcons]
@@ -329,9 +346,24 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
       
       const newFolder = createFolder(newFolderItems, targetItem.name);
       
-      // 更新列表
+      console.log('✅ 创建文件夹:', {
+        folderName: newFolder.name,
+        itemCount: newFolder.items.length,
+        items: newFolder.items.map(i => i.name)
+      });
+      
+      // 更新列表 - 移除拖动的元素和目标元素，在目标位置插入新文件夹
       const newItems = items.filter((_, index) => index !== evt.oldIndex && index !== targetIndex);
-      newItems.splice(Math.min(evt.oldIndex, targetIndex), 0, newFolder);
+      
+      // 计算插入位置：使用较小的索引
+      const insertIndex = Math.min(evt.oldIndex, targetIndex);
+      newItems.splice(insertIndex, 0, newFolder);
+      
+      console.log('📋 更新后的列表:', {
+        原始数量: items.length,
+        新数量: newItems.length,
+        items: newItems.map(i => i.name)
+      });
       
       onItemsChange(newItems);
     }
@@ -347,7 +379,11 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         <ReactSortable
           list={items.map((item) => ({ ...item, chosen: false, selected: false }))}
           setList={(newState) => {
-            onItemsChange(newState);
+            // 如果处于合并模式，不执行默认的排序更新
+            // 合并逻辑会在 onEnd 中处理
+            if (!mergeStateRef.current.mergeMode) {
+              onItemsChange(newState);
+            }
           }}
           animation={200}
           delay={0}
