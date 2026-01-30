@@ -23,7 +23,6 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "./ui/context-menu";
-import { useDroppable } from "@dnd-kit/core";
 
 // 可用的图标选项
 const availableIcons = {
@@ -57,10 +56,6 @@ const SidebarButton = ({
   onRemoveItem: (id: string) => void;
   canDelete: boolean;
 }) => {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `sidebar-button-${item.id}`,
-  });
-
   return (
     <motion.div
       key={item.id}
@@ -72,12 +67,10 @@ const SidebarButton = ({
       <ContextMenu>
         <ContextMenuTrigger>
           <div
-            ref={setNodeRef}
             className={cn(
               "w-full h-[52px] flex flex-col gap-0.5 py-1 cursor-pointer group",
               "transition-colors duration-300 ease-out items-center justify-center",
-              isSelected && "bg-primary/30",
-              isOver && "bg-primary/40 ring-2 ring-white/50"
+              isSelected && "bg-primary/30"
             )}
             onClick={() => onItemClick(item)}
           >
