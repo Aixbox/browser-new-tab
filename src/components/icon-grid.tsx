@@ -378,7 +378,13 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         } else {
           // 检查是否是文件夹
           if (targetItem && isFolder(targetItem)) {
-            // 悬停在文件夹上
+            // 拖动到文件夹上：触发合并高亮 + 悬停计时器
+            mergeStateRef.current.mergeMode = true;
+            mergeStateRef.current.mergePosition = 'after';
+            related.classList.add('merge-highlight');
+            mergeStateRef.current.highlightedElement = related;
+            
+            // 悬停在文件夹上，设置计时器
             if (folderHoverStateRef.current.hoveredFolder?.id !== targetItem.id) {
               // 切换到新文件夹，重置计时器
               if (folderHoverStateRef.current.hoverTimer) {
@@ -395,10 +401,6 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
               }, 1000);
             }
             
-            // 不触发合并
-            mergeStateRef.current.mergeMode = false;
-            related.classList.remove('merge-highlight');
-            mergeStateRef.current.highlightedElement = null;
             return false;
           } else {
             // 普通图标，触发合并
@@ -455,7 +457,13 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         } else {
           // 检查是否是文件夹
           if (targetItem && isFolder(targetItem)) {
-            // 悬停在文件夹上
+            // 拖动到文件夹上：触发合并高亮 + 悬停计时器
+            mergeStateRef.current.mergeMode = true;
+            mergeStateRef.current.mergePosition = 'before';
+            related.classList.add('merge-highlight');
+            mergeStateRef.current.highlightedElement = related;
+            
+            // 悬停在文件夹上，设置计时器
             if (folderHoverStateRef.current.hoveredFolder?.id !== targetItem.id) {
               // 切换到新文件夹，重置计时器
               if (folderHoverStateRef.current.hoverTimer) {
@@ -472,10 +480,6 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
               }, 1000);
             }
             
-            // 不触发合并
-            mergeStateRef.current.mergeMode = false;
-            related.classList.remove('merge-highlight');
-            mergeStateRef.current.highlightedElement = null;
             return false;
           } else {
             // 普通图标，触发合并
@@ -535,7 +539,8 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         targetItem: targetItem?.name,
         draggedIndex: evt.oldIndex,
         targetIndex,
-        mergePosition: mergeStateRef.current.mergePosition
+        mergePosition: mergeStateRef.current.mergePosition,
+        targetIsFolder: targetItem ? isFolder(targetItem) : false
       });
       
       if (!draggedItem || !targetItem || targetIndex < 0) {
@@ -548,40 +553,70 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
       
       // 提取图标项
       const draggedIcons: IconItem[] = isFolder(draggedItem) ? draggedItem.items : [draggedItem];
-      const targetIcons: IconItem[] = isFolder(targetItem) ? targetItem.items : [targetItem];
       
-      console.log('📦 提取的图标:', {
-        draggedIcons: draggedIcons.map(i => i.name),
-        targetIcons: targetIcons.map(i => i.name)
-      });
-      
-      // 根据合并位置创建新文件夹
-      const newFolderItems = mergeStateRef.current.mergePosition === 'before' 
-        ? [...draggedIcons, ...targetIcons]
-        : [...targetIcons, ...draggedIcons];
-      
-      const newFolder = createFolder(newFolderItems, targetItem.name);
-      
-      console.log('✅ 创建文件夹:', {
-        folderName: newFolder.name,
-        itemCount: newFolder.items.length,
-        items: newFolder.items.map(i => i.name)
-      });
-      
-      // 更新列表 - 移除拖动的元素和目标元素，在目标位置插入新文件夹
-      const newItems = items.filter((_, index) => index !== evt.oldIndex && index !== targetIndex);
-      
-      // 计算插入位置：使用较小的索引
-      const insertIndex = Math.min(evt.oldIndex, targetIndex);
-      newItems.splice(insertIndex, 0, newFolder);
-      
-      console.log('📋 更新后的列表:', {
-        原始数量: items.length,
-        新数量: newItems.length,
-        items: newItems.map(i => i.name)
-      });
-      
-      onItemsChange(newItems);
+      // 判断目标是否是文件夹
+      if (isFolder(targetItem)) {
+        // 目标是文件夹：将拖动的图标添加到文件夹内
+        console.log('� 添加到文件夹:', targetItem.name);
+        
+        const updatedFolder = {
+          ...targetItem,
+          items: [...targetItem.items, ...draggedIcons]
+        };
+        
+        // 更新列表：移除拖动的元素，更新目标文件夹
+        const newItems = items
+          .filter((_, index) => index !== evt.oldIndex)
+          .map((item, index) => {
+            // 注意：过滤后索引会变化
+            const originalIndex = index >= evt.oldIndex ? index + 1 : index;
+            return originalIndex === targetIndex ? updatedFolder : item;
+          });
+        
+        console.log('✅ 更新后的列表:', {
+          原始数量: items.length,
+          新数量: newItems.length,
+          items: newItems.map(i => i.name)
+        });
+        
+        onItemsChange(newItems);
+      } else {
+        // 目标是普通图标：创建新文件夹
+        const targetIcons: IconItem[] = [targetItem];
+        
+        console.log('📦 提取的图标:', {
+          draggedIcons: draggedIcons.map(i => i.name),
+          targetIcons: targetIcons.map(i => i.name)
+        });
+        
+        // 根据合并位置创建新文件夹
+        const newFolderItems = mergeStateRef.current.mergePosition === 'before' 
+          ? [...draggedIcons, ...targetIcons]
+          : [...targetIcons, ...draggedIcons];
+        
+        const newFolder = createFolder(newFolderItems, targetItem.name);
+        
+        console.log('✅ 创建文件夹:', {
+          folderName: newFolder.name,
+          itemCount: newFolder.items.length,
+          items: newFolder.items.map(i => i.name)
+        });
+        
+        // 更新列表 - 移除拖动的元素和目标元素，在目标位置插入新文件夹
+        const newItems = items.filter((_, index) => index !== evt.oldIndex && index !== targetIndex);
+        
+        // 计算插入位置：使用较小的索引
+        const insertIndex = Math.min(evt.oldIndex, targetIndex);
+        newItems.splice(insertIndex, 0, newFolder);
+        
+        console.log('📋 更新后的列表:', {
+          原始数量: items.length,
+          新数量: newItems.length,
+          items: newItems.map(i => i.name)
+        });
+        
+        onItemsChange(newItems);
+      }
     }
     
     mergeStateRef.current.mergeMode = false;
