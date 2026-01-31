@@ -135,12 +135,15 @@ export const SearchEngine = ({
   // 保存搜索引擎到 KV
   const saveSearchEngines = async (engines: SearchEngine[]) => {
     try {
+      const secret = localStorage.getItem('secret_key');
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'setSetting',
           key: 'search_engines',
           value: JSON.stringify(engines),
+          secret,
         }),
       });
       // 更新时间戳
@@ -154,12 +157,15 @@ export const SearchEngine = ({
   // 保存选中的搜索引擎到 KV
   const saveSelectedEngine = async (engineId: string) => {
     try {
+      const secret = localStorage.getItem('secret_key');
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'setSetting',
           key: 'selected_engine',
           value: engineId,
+          secret,
         }),
       });
       // 更新时间戳

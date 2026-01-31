@@ -30,21 +30,43 @@ export default async function handler(request: NextRequest) {
       return new Response('Invalid icon URL', { status: 400 });
     }
 
-    // 设置请求头，模拟浏览器请求
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      },
-      // 5秒超时
-      signal: AbortSignal.timeout(5000),
-    });
+    // 尝试获取图标的多个可能路径
+    const urlsToTry = [
+      url, // 原始 URL
+      `${iconUrl.origin}/favicon.ico`, // 根目录 favicon.ico
+      `${iconUrl.origin}/favicon.png`, // 根目录 favicon.png
+    ];
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    let response: Response | null = null;
+    let lastError: Error | null = null;
+
+    // 依次尝试每个 URL
+    for (const tryUrl of urlsToTry) {
+      try {
+        const res = await fetch(tryUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
+          // 5秒超时
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (res.ok) {
+          response = res;
+          break;
+        }
+      } catch (error) {
+        lastError = error as Error;
+        // 继续尝试下一个 URL
+      }
+    }
+
+    if (!response) {
+      throw lastError || new Error('All icon URLs failed');
     }
 
     // 检查内容类型
@@ -70,11 +92,18 @@ export default async function handler(request: NextRequest) {
   } catch (error) {
     console.error('Icon proxy error:', error);
     
-    // 返回默认图标或错误
-    return new Response('Icon not found', { 
-      status: 404,
+    // 返回一个简单的 SVG 占位符图标
+    const placeholderSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+      <rect width="32" height="32" fill="#e5e7eb" rx="4"/>
+      <path d="M16 8a8 8 0 100 16 8 8 0 000-16zm0 2a6 6 0 110 12 6 6 0 010-12z" fill="#9ca3af"/>
+    </svg>`;
+    
+    return new Response(placeholderSvg, { 
+      status: 200,
       headers: {
-        'Cache-Control': 'public, max-age=3600', // 错误也缓存1小时
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': 'public, max-age=3600', // 缓存1小时
+        'Access-Control-Allow-Origin': '*',
       }
     });
   }

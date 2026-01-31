@@ -108,12 +108,15 @@ export default function Home({
     
     const saveToServer = async () => {
       try {
+        const secret = localStorage.getItem('secret_key');
         await fetch("/api/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            action: 'setSetting',
             key: "icon_items",
             value: JSON.stringify(gridItems),
+            secret,
           }),
         });
         const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
@@ -154,9 +157,7 @@ export default function Home({
         onContextMenu={handleContextMenu}
       >
         {/* 背景 */}
-        {currentBackgroundUrl && (
-          <Background src={currentBackgroundUrl} />
-        )}
+        <Background src={currentBackgroundUrl || "/alt-placeholder.png"} />
 
         {/* 侧边栏 */}
         {currentLayoutMode === "component" && (
