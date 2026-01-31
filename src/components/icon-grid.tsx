@@ -139,6 +139,9 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
   const [openFolder, setOpenFolder] = useState<GridItem | null>(null);
   const [folderItems, setFolderItems] = useState<IconItem[]>([]);
   
+  // 保存最后打开的文件夹 ID，用于弹窗关闭后的数据同步
+  const lastOpenFolderIdRef = useRef<string | null>(null);
+  
   // 合并模式状态
   const mergeStateRef = useRef({
     mergeMode: false,
@@ -249,11 +252,34 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
     if (isFolder(folder)) {
       setOpenFolder(folder);
       setFolderItems([...folder.items]);
+      lastOpenFolderIdRef.current = folder.id;  // ← 保存文件夹 ID
     }
   };
 
   const handleFolderItemsChange = (newItems: IconItem[]) => {
+    console.log('📝 handleFolderItemsChange 被调用:', {
+      lastOpenFolderId: lastOpenFolderIdRef.current,
+      newItemsCount: newItems.length,
+      newItems: newItems.map(i => i.name)
+    });
+    
     setFolderItems(newItems);
+    
+    // 使用 lastOpenFolderIdRef 而不是 openFolder，因为弹窗可能已关闭
+    if (lastOpenFolderIdRef.current) {
+      const updatedItems = items.map(item => {
+        if (item.id === lastOpenFolderIdRef.current && isFolder(item)) {
+          return {
+            ...item,
+            items: newItems,
+          };
+        }
+        return item;
+      });
+      
+      console.log('✅ 同步更新 items 中的文件夹');
+      onItemsChange(updatedItems);
+    }
   };
 
   const handleCloseFolderModal = () => {
@@ -278,6 +304,7 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
     onItemsChange(updatedItems);
     setOpenFolder(null);
     setFolderItems([]);
+    lastOpenFolderIdRef.current = null;  // ← 清除保存的 ID
   };
 
   const handleSortableMove = (evt: Sortable.MoveEvent, originalEvent: Event) => {
@@ -630,10 +657,35 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         <ReactSortable
           list={items.map((item) => ({ ...item, chosen: false, selected: false }))}
           setList={(newState) => {
+            console.log('🔵 外部网格 setList 被调用:', {
+              lastOpenFolderId: lastOpenFolderIdRef.current,
+              newStateCount: newState.length,
+              folderItemsCount: folderItems.length
+            });
+            
             // 如果处于合并模式，不执行默认的排序更新
             // 合并逻辑会在 onEnd 中处理
             if (!mergeStateRef.current.mergeMode) {
-              onItemsChange(newState);
+              // 如果有最近打开的文件夹，需要保留最新的 folderItems
+              if (lastOpenFolderIdRef.current) {
+                const updatedState = newState.map(item => {
+                  if (item.id === lastOpenFolderIdRef.current && isFolder(item)) {
+                    console.log('🔄 替换文件夹内容:', {
+                      folderId: item.id,
+                      oldCount: isFolder(item) ? item.items.length : 0,
+                      newCount: folderItems.length
+                    });
+                    return {
+                      ...item,
+                      items: folderItems,
+                    };
+                  }
+                  return item;
+                });
+                onItemsChange(updatedState);
+              } else {
+                onItemsChange(newState);
+              }
             }
           }}
           group="icon-grid"
