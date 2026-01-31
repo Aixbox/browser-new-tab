@@ -159,6 +159,39 @@ export default function Home({
         {/* 背景 */}
         <Background src={currentBackgroundUrl || "/alt-placeholder.png"} />
 
+        {/* 临时重置按钮 - 开发调试用 */}
+        <button
+          onClick={async () => {
+            if (confirm('确定要重置所有图标数据吗？这将清除所有自定义图标并恢复默认状态。')) {
+              try {
+                const secret = localStorage.getItem('secret_key');
+                const response = await fetch('/api/reset-icons', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ secret }),
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                  // 清除本地存储
+                  localStorage.removeItem('page_grid_items');
+                  alert('数据已重置！页面即将刷新...');
+                  window.location.reload();
+                } else {
+                  alert('重置失败: ' + (result.message || result.error));
+                }
+              } catch (error) {
+                console.error('重置失败:', error);
+                alert('重置失败，请查看控制台');
+              }
+            }
+          }}
+          className="fixed top-4 right-4 z-50 px-4 py-2 bg-red-500/80 hover:bg-red-600/80 text-white rounded-full backdrop-blur-sm border-2 border-white/30 shadow-lg transition-all"
+        >
+          🔄 重置图标数据
+        </button>
+
         {/* 侧边栏 */}
         {currentLayoutMode === "component" && (
           <SidebarWrapper
