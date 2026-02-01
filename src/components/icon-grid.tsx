@@ -263,22 +263,14 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
       newItems: newItems.map(i => i.name)
     });
     
+    // 只更新 folderItems，不更新 items
+    // 让外部网格的 setList 统一处理
     setFolderItems(newItems);
     
-    // 使用 lastOpenFolderIdRef 而不是 openFolder，因为弹窗可能已关闭
-    if (lastOpenFolderIdRef.current) {
-      const updatedItems = items.map(item => {
-        if (item.id === lastOpenFolderIdRef.current && isFolder(item)) {
-          return {
-            ...item,
-            items: newItems,
-          };
-        }
-        return item;
-      });
-      
-      console.log('✅ 同步更新 items 中的文件夹');
-      onItemsChange(updatedItems);
+    // 如果文件夹被清空或只剩1个，关闭弹窗
+    if (newItems.length <= 1) {
+      setOpenFolder(null);
+      // 不清除 lastOpenFolderIdRef，让外部网格处理解散逻辑
     }
   };
 
@@ -675,14 +667,33 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
                       oldCount: isFolder(item) ? item.items.length : 0,
                       newCount: folderItems.length
                     });
+                    
+                    // 如果只剩一个图标，解散文件夹
+                    if (folderItems.length === 1) {
+                      console.log('📂 文件夹只剩1个图标，自动解散');
+                      return folderItems[0];
+                    }
+                    // 如果为空，移除文件夹
+                    if (folderItems.length === 0) {
+                      console.log('📂 文件夹为空，移除');
+                      return null;
+                    }
+                    // 更新文件夹内容
                     return {
                       ...item,
                       items: folderItems,
                     };
                   }
                   return item;
-                });
+                }).filter((item): item is GridItem => item !== null);
+                
                 onItemsChange(updatedState);
+                
+                // 如果文件夹被解散或移除，清除引用
+                if (folderItems.length <= 1) {
+                  lastOpenFolderIdRef.current = null;
+                  setOpenFolder(null);
+                }
               } else {
                 onItemsChange(newState);
               }
