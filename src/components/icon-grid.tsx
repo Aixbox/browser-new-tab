@@ -142,6 +142,9 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
   // 保存最后打开的文件夹 ID，用于弹窗关闭后的数据同步
   const lastOpenFolderIdRef = useRef<string | null>(null);
   
+  // 保存最新的 folderItems，用于外部网格 setList 读取（避免读取过期的 state）
+  const latestFolderItemsRef = useRef<IconItem[]>([]);
+  
   // 合并模式状态
   const mergeStateRef = useRef({
     mergeMode: false,
@@ -252,7 +255,8 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
     if (isFolder(folder)) {
       setOpenFolder(folder);
       setFolderItems([...folder.items]);
-      lastOpenFolderIdRef.current = folder.id;  // ← 保存文件夹 ID
+      lastOpenFolderIdRef.current = folder.id;
+      latestFolderItemsRef.current = [...folder.items];  // ← 同步初始化 ref
     }
   };
 
@@ -263,14 +267,15 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
       newItems: newItems.map(i => i.name)
     });
     
-    // 只更新 folderItems，不更新 items
-    // 让外部网格的 setList 统一处理
+    // 立即更新 ref（同步）
+    latestFolderItemsRef.current = newItems;
+    
+    // 更新 state（用于 UI 渲染）
     setFolderItems(newItems);
     
     // 如果文件夹被清空或只剩1个，关闭弹窗
     if (newItems.length <= 1) {
       setOpenFolder(null);
-      // 不清除 lastOpenFolderIdRef，让外部网格处理解散逻辑
     }
   };
 
@@ -652,7 +657,8 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
             console.log('🔵 外部网格 setList 被调用:', {
               lastOpenFolderId: lastOpenFolderIdRef.current,
               newStateCount: newState.length,
-              folderItemsCount: folderItems.length
+              folderItemsCount: folderItems.length,
+              latestFolderItemsRefCount: latestFolderItemsRef.current.length
             });
             
             // 如果处于合并模式，不执行默认的排序更新
@@ -660,40 +666,45 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
             if (!mergeStateRef.current.mergeMode) {
               // 如果有最近打开的文件夹，需要保留最新的 folderItems
               if (lastOpenFolderIdRef.current) {
-                const updatedState = newState.map(item => {
-                  if (item.id === lastOpenFolderIdRef.current && isFolder(item)) {
-                    console.log('🔄 替换文件夹内容:', {
-                      folderId: item.id,
-                      oldCount: isFolder(item) ? item.items.length : 0,
-                      newCount: folderItems.length
-                    });
-                    
-                    // 如果只剩一个图标，解散文件夹
-                    if (folderItems.length === 1) {
-                      console.log('📂 文件夹只剩1个图标，自动解散');
-                      return folderItems[0];
+                // 使用 setTimeout 延迟到下一个事件循环，确保 handleFolderItemsChange 的所有调用都完成
+                setTimeout(() => {
+                  const latestFolderItems = latestFolderItemsRef.current;
+                  
+                  console.log('⏰ 延迟更新，使用最新的文件夹内容:', {
+                    folderId: lastOpenFolderIdRef.current,
+                    itemCount: latestFolderItems.length,
+                    items: latestFolderItems.map(i => i.name)
+                  });
+                  
+                  const updatedState = newState.map(item => {
+                    if (item.id === lastOpenFolderIdRef.current && isFolder(item)) {
+                      // 如果只剩一个图标，解散文件夹
+                      if (latestFolderItems.length === 1) {
+                        console.log('📂 文件夹只剩1个图标，自动解散');
+                        return latestFolderItems[0];
+                      }
+                      // 如果为空，移除文件夹
+                      if (latestFolderItems.length === 0) {
+                        console.log('📂 文件夹为空，移除');
+                        return null;
+                      }
+                      // 更新文件夹内容
+                      return {
+                        ...item,
+                        items: latestFolderItems,
+                      };
                     }
-                    // 如果为空，移除文件夹
-                    if (folderItems.length === 0) {
-                      console.log('📂 文件夹为空，移除');
-                      return null;
-                    }
-                    // 更新文件夹内容
-                    return {
-                      ...item,
-                      items: folderItems,
-                    };
+                    return item;
+                  }).filter((item): item is GridItem => item !== null);
+                  
+                  onItemsChange(updatedState);
+                  
+                  // 如果文件夹被解散或移除，清除引用
+                  if (latestFolderItems.length <= 1) {
+                    lastOpenFolderIdRef.current = null;
+                    setOpenFolder(null);
                   }
-                  return item;
-                }).filter((item): item is GridItem => item !== null);
-                
-                onItemsChange(updatedState);
-                
-                // 如果文件夹被解散或移除，清除引用
-                if (folderItems.length <= 1) {
-                  lastOpenFolderIdRef.current = null;
-                  setOpenFolder(null);
-                }
+                }, 0);
               } else {
                 onItemsChange(newState);
               }
