@@ -654,11 +654,13 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
         <ReactSortable
           list={items.map((item) => ({ ...item, chosen: false, selected: false }))}
           setList={(newState) => {
+            const currentRefCount = latestFolderItemsRef.current.length;
+            
             console.log('🔵 外部网格 setList 被调用:', {
               lastOpenFolderId: lastOpenFolderIdRef.current,
               newStateCount: newState.length,
               folderItemsCount: folderItems.length,
-              latestFolderItemsRefCount: latestFolderItemsRef.current.length
+              latestFolderItemsRefCount: currentRefCount
             });
             
             // 如果处于合并模式，不执行默认的排序更新
@@ -666,11 +668,11 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
             if (!mergeStateRef.current.mergeMode) {
               // 如果有最近打开的文件夹，需要保留最新的 folderItems
               if (lastOpenFolderIdRef.current) {
-                // 使用 setTimeout 延迟到下一个事件循环，确保 handleFolderItemsChange 的所有调用都完成
-                setTimeout(() => {
+                // 使用 requestAnimationFrame 在下一帧更新，减少闪烁
+                requestAnimationFrame(() => {
                   const latestFolderItems = latestFolderItemsRef.current;
                   
-                  console.log('⏰ 延迟更新，使用最新的文件夹内容:', {
+                  console.log('🎬 下一帧更新，使用最新的文件夹内容:', {
                     folderId: lastOpenFolderIdRef.current,
                     itemCount: latestFolderItems.length,
                     items: latestFolderItems.map(i => i.name)
@@ -678,6 +680,12 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
                   
                   const updatedState = newState.map(item => {
                     if (item.id === lastOpenFolderIdRef.current && isFolder(item)) {
+                      console.log('🔄 替换文件夹内容:', {
+                        folderId: item.id,
+                        oldCount: isFolder(item) ? item.items.length : 0,
+                        newCount: latestFolderItems.length
+                      });
+                      
                       // 如果只剩一个图标，解散文件夹
                       if (latestFolderItems.length === 1) {
                         console.log('📂 文件夹只剩1个图标，自动解散');
@@ -704,7 +712,7 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
                     lastOpenFolderIdRef.current = null;
                     setOpenFolder(null);
                   }
-                }, 0);
+                });
               } else {
                 onItemsChange(newState);
               }
