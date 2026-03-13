@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ReactSortable } from "react-sortablejs";
-import { GlobeIcon } from "@radix-ui/react-icons";
+import { HexColorPicker } from "react-colorful";
+import { GlobeIcon, PlusIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { Folder } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import * as Portal from "@radix-ui/react-portal";
 import { cn } from "@/lib/utils";
 import type { GridItem, IconItem } from "@/lib/grid-model";
 import type { IconStyleSettings } from "@/components/icon-settings";
-import { isFolder, createFolder } from "@/lib/grid-model";
+import { isFolder, isIcon, createFolder } from "@/lib/grid-model";
 import type Sortable from "sortablejs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -133,11 +139,69 @@ const IconItem = ({
   );
 };
 
+// 添加新图标的占位符
+const AddIconPlaceholder = ({ onClick, iconStyle }: { onClick: () => void; iconStyle: IconStyleSettings }) => {
+  return (
+    <div
+      className="flex flex-col items-center gap-2 cursor-pointer group"
+      onClick={onClick}
+      style={{ width: `${iconStyle.size}px` }}
+    >
+      <div
+        className="flex items-center justify-center rounded-lg border-2 border-dashed border-white/30 hover:border-white/50 transition-colors"
+        style={{
+          width: `${iconStyle.size}px`,
+          height: `${iconStyle.size}px`,
+          borderRadius: `${iconStyle.borderRadius}px`,
+        }}
+      >
+        <PlusIcon className="w-6 h-6 text-white/60" />
+      </div>
+      {iconStyle.showName && (
+        <span
+          className="text-center truncate w-full text-white/60"
+          style={{
+            fontSize: `${iconStyle.nameSize}px`,
+          }}
+        >
+          添加
+        </span>
+      )}
+    </div>
+  );
+};
+
+// 预设颜色
+const presetColors = [
+  '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+];
+
 export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: IconGridProps) => {
   const gridRef = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(6);
   const [openFolder, setOpenFolder] = useState<GridItem | null>(null);
   const [folderItems, setFolderItems] = useState<IconItem[]>([]);
+
+  // 添加图标对话框状态
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingItem, setEditingItem] = useState<IconItem | null>(null);
+  const [formData, setFormData] = useState({
+    url: '',
+    name: '',
+    iconLogo: '',
+    iconImage: '',
+    iconText: '',
+    iconColor: '#3b82f6',
+  });
+  const [selectedIconType, setSelectedIconType] = useState<'logo' | 'image' | 'text'>('logo');
+  const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+  const [tempColor, setTempColor] = useState('#3b82f6');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const colorButtonRef = useRef<HTMLButtonElement>(null);
+  const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
   
   // 保存最后打开的文件夹 ID，用于弹窗关闭后的数据同步
   const lastOpenFolderIdRef = useRef<string | null>(null);
@@ -302,6 +366,171 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
     setOpenFolder(null);
     setFolderItems([]);
     lastOpenFolderIdRef.current = null;  // ← 清除保存的 ID
+  };
+
+  // 从URL获取网站元数据
+  const fetchMetadata = async (url: string) => {
+    if (!url.trim()) return;
+    setIsLoadingMetadata(true);
+    try {
+      const response = await fetch(`/api/metadata?url=${encodeURIComponent(url)}`);
+      if (response.ok) {
+        const data = await response.json() as { title?: string; favicon?: string };
+        setFormData(prev => ({
+          ...prev,
+          name: data.title || prev.name,
+          iconText: data.title?.substring(0, 4) || prev.iconText,
+          iconLogo: data.favicon || prev.iconLogo,
+        }));
+      }
+    } catch (error) {
+      console.error('获取网站元数据失败:', error);
+    } finally {
+      setIsLoadingMetadata(false);
+    }
+  };
+
+  const handleUrlBlur = useCallback(() => {
+    if (formData.url) {
+      fetchMetadata(formData.url);
+    }
+  }, [formData.url]);
+
+  const handleColorChange = useCallback((color: string) => {
+    setTempColor(color);
+    setFormData(prev => ({ ...prev, iconColor: color }));
+  }, []);
+
+  const handlePresetColorClick = useCallback((color: string) => {
+    setFormData(prev => ({ ...prev, iconColor: color }));
+    setTempColor(color);
+    setShowColorPicker(false);
+  }, []);
+
+  const handleCustomColorClick = useCallback(() => {
+    if (colorButtonRef.current) {
+      const rect = colorButtonRef.current.getBoundingClientRect();
+      setPickerPosition({ top: rect.bottom + 8, left: rect.left });
+    }
+    setShowColorPicker(prev => !prev);
+  }, []);
+
+  // 点击外部关闭颜色选择器
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+    if (showColorPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showColorPicker]);
+
+  const resetForm = () => {
+    setFormData({ url: '', name: '', iconLogo: '', iconImage: '', iconText: '', iconColor: '#3b82f6' });
+    setSelectedIconType('logo');
+    setIsEditMode(false);
+    setEditingItem(null);
+    setShowColorPicker(false);
+  };
+
+  const handleSaveIcon = (continueAdding: boolean = false) => {
+    if (!formData.url.trim() || !formData.name.trim()) return;
+
+    let newItems: GridItem[];
+
+    if (isEditMode && editingItem) {
+      newItems = items.map(item => {
+        if (item.id === editingItem.id && isIcon(item)) {
+          return {
+            ...item,
+            name: formData.name.trim(),
+            url: formData.url.trim(),
+            iconType: selectedIconType,
+            iconLogo: formData.iconLogo || undefined,
+            iconImage: formData.iconImage || undefined,
+            iconText: formData.iconText || undefined,
+            iconColor: formData.iconColor || undefined,
+          };
+        }
+        return item;
+      });
+    } else {
+      const newItem: IconItem = {
+        id: Date.now().toString(),
+        name: formData.name.trim(),
+        url: formData.url.trim(),
+        iconType: selectedIconType,
+        iconLogo: formData.iconLogo || undefined,
+        iconImage: formData.iconImage || undefined,
+        iconText: formData.iconText || undefined,
+        iconColor: formData.iconColor || undefined,
+      };
+      newItems = [...items, newItem];
+    }
+
+    onItemsChange(newItems);
+
+    if (continueAdding && !isEditMode) {
+      setFormData({ url: '', name: '', iconLogo: '', iconImage: '', iconText: '', iconColor: '#3b82f6' });
+      setSelectedIconType('logo');
+    } else {
+      resetForm();
+      setIsDialogOpen(false);
+    }
+  };
+
+  const renderIconPreview = () => {
+    const previews = [];
+    if (formData.iconLogo) {
+      previews.push(
+        <div
+          key="logo"
+          className={cn(
+            "w-16 h-16 flex items-center justify-center rounded-lg bg-white/5 cursor-pointer transition-all",
+            selectedIconType === 'logo' ? "ring-4 ring-white/80 scale-105" : "ring-2 ring-white/30 hover:ring-white/50"
+          )}
+          onClick={() => setSelectedIconType('logo')}
+        >
+          <img src={formData.iconLogo} alt="Logo" className="w-10 h-10 rounded object-contain" />
+        </div>
+      );
+    }
+    if (formData.iconImage) {
+      previews.push(
+        <div
+          key="image"
+          className={cn(
+            "w-16 h-16 rounded-lg cursor-pointer transition-all overflow-hidden",
+            selectedIconType === 'image' ? "ring-4 ring-white/80 scale-105" : "ring-2 ring-white/30 hover:ring-white/50"
+          )}
+          onClick={() => setSelectedIconType('image')}
+        >
+          <img src={formData.iconImage} alt="Icon" className="w-full h-full object-cover" />
+        </div>
+      );
+    }
+    if (formData.iconText && formData.iconColor) {
+      previews.push(
+        <div
+          key="text"
+          className={cn(
+            "w-16 h-16 flex items-center justify-center rounded-lg cursor-pointer transition-all",
+            selectedIconType === 'text' ? "ring-4 ring-white/80 scale-105" : "ring-2 ring-white/30 hover:ring-white/50"
+          )}
+          style={{ backgroundColor: formData.iconColor }}
+          onClick={() => setSelectedIconType('text')}
+        >
+          <span className="text-white text-lg font-bold">{formData.iconText.substring(0, 4)}</span>
+        </div>
+      );
+    }
+    if (previews.length === 0) {
+      return <p className="text-sm text-white/40">输入地址后自动获取图标</p>;
+    }
+    return previews;
   };
 
   const handleSortableMove = (evt: Sortable.MoveEvent, originalEvent: Event) => {
@@ -745,6 +974,8 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
           dragClass="dragging-element"
           onMove={handleSortableMove}
           onEnd={handleSortableEnd}
+          filter=".add-icon-placeholder"
+          preventOnFilter={false}
           className={cn(
             "grid w-full h-full content-start"
           )}
@@ -764,6 +995,9 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
               />
             </div>
           ))}
+          <div key="__add__" className="add-icon-placeholder">
+            <AddIconPlaceholder onClick={() => setIsDialogOpen(true)} iconStyle={iconStyle} />
+          </div>
         </ReactSortable>
       </div>
 
@@ -803,6 +1037,200 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 添加图标对话框 */}
+      <AnimatePresence>
+        {isDialogOpen && (
+          <Portal.Root>
+            {/* 遮罩 */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+              onClick={() => { setIsDialogOpen(false); resetForm(); }}
+            />
+
+            {/* 对话框 */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] max-w-[90vw] bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-xl z-50 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* 对话框头部 */}
+              <div className="flex items-center justify-between p-6 border-b border-white/20">
+                <h2 className="text-xl font-semibold text-white">
+                  {isEditMode ? '编辑图标' : '添加图标'}
+                </h2>
+                <button
+                  onClick={() => { setIsDialogOpen(false); resetForm(); }}
+                  className="w-8 h-8 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-white/80 hover:text-white"
+                >
+                  <Cross2Icon className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* 表单内容 */}
+              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                {/* 地址 */}
+                <div className="flex items-center gap-4">
+                  <Label htmlFor="icon-url" className="text-white w-24 flex-shrink-0">地址</Label>
+                  <Input
+                    id="icon-url"
+                    type="url"
+                    placeholder="https://example.com"
+                    value={formData.url}
+                    onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                    onBlur={handleUrlBlur}
+                    disabled={isLoadingMetadata}
+                    className="flex-1"
+                  />
+                </div>
+
+                {/* 名称 */}
+                <div className="flex items-center gap-4">
+                  <Label htmlFor="icon-name" className="text-white w-24 flex-shrink-0">名称</Label>
+                  <Input
+                    id="icon-name"
+                    placeholder="网站名称"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="flex-1"
+                  />
+                </div>
+
+                {/* 图标预览 */}
+                <div className="flex items-start gap-4">
+                  <Label className="text-white w-24 flex-shrink-0 pt-2">图标</Label>
+                  <div className="flex-1">
+                    <div className="flex gap-3 flex-wrap">
+                      {renderIconPreview()}
+                    </div>
+                    <p className="text-xs text-white/60 mt-2">点击选择要使用的图标样式</p>
+                  </div>
+                </div>
+
+                {/* 图标链接 */}
+                <div className="flex items-center gap-4">
+                  <Label htmlFor="icon-image" className="text-white w-24 flex-shrink-0">图标链接</Label>
+                  <Input
+                    id="icon-image"
+                    type="url"
+                    placeholder="https://example.com/icon.png（可选）"
+                    value={formData.iconImage}
+                    onChange={(e) => setFormData({ ...formData, iconImage: e.target.value })}
+                    className="flex-1"
+                  />
+                </div>
+
+                {/* 图标颜色 */}
+                <div className="flex items-center gap-4">
+                  <Label className="text-white w-24 flex-shrink-0">图标颜色</Label>
+                  <div className="flex gap-2 flex-1 items-center flex-wrap">
+                    {presetColors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => handlePresetColorClick(color)}
+                        className={cn(
+                          "w-6 h-6 rounded-full cursor-pointer transition-transform flex-shrink-0",
+                          formData.iconColor === color
+                            ? "ring-2 ring-white/80 ring-offset-2 ring-offset-transparent scale-110"
+                            : "hover:scale-110"
+                        )}
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                    ))}
+                    <div className="relative">
+                      <button
+                        ref={colorButtonRef}
+                        type="button"
+                        onClick={handleCustomColorClick}
+                        className={cn(
+                          "w-6 h-6 rounded-full transition-transform flex items-center justify-center cursor-pointer",
+                          !presetColors.includes(formData.iconColor)
+                            ? "ring-2 ring-white/80 ring-offset-2 ring-offset-transparent scale-110"
+                            : "border-2 border-dashed border-white/50 hover:scale-110"
+                        )}
+                        style={{
+                          backgroundColor: !presetColors.includes(formData.iconColor) ? formData.iconColor : 'transparent'
+                        }}
+                        title="自定义颜色"
+                      >
+                        {presetColors.includes(formData.iconColor) && (
+                          <PlusIcon className="w-3 h-3 text-white" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 颜色选择器弹出层 */}
+                {showColorPicker && (
+                  <Portal.Root>
+                    <div
+                      ref={colorPickerRef}
+                      className="fixed z-[100] p-3 bg-primary/20 backdrop-blur-md border-2 border-white/30 rounded-lg shadow-xl"
+                      style={{
+                        top: `${pickerPosition.top}px`,
+                        left: `${pickerPosition.left}px`,
+                      }}
+                    >
+                      <HexColorPicker color={tempColor} onChange={handleColorChange} />
+                      <div className="mt-2 flex items-center gap-2">
+                        <Input
+                          type="text"
+                          value={tempColor}
+                          onChange={(e) => handleColorChange(e.target.value)}
+                          className="h-8 text-sm font-mono"
+                          placeholder="#000000"
+                        />
+                      </div>
+                    </div>
+                  </Portal.Root>
+                )}
+
+                {/* 图标文字 */}
+                <div className="flex items-center gap-4">
+                  <Label htmlFor="icon-text" className="text-white w-24 flex-shrink-0">图标文字</Label>
+                  <Input
+                    id="icon-text"
+                    placeholder="图标中显示的文字（可选）"
+                    value={formData.iconText}
+                    onChange={(e) => setFormData({ ...formData, iconText: e.target.value })}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+
+              {/* 按钮区域 */}
+              <div className="flex gap-3 p-6 border-t border-white/20">
+                <Button
+                  onClick={() => handleSaveIcon(false)}
+                  disabled={!formData.url.trim() || !formData.name.trim()}
+                  className="flex-1"
+                >
+                  {isEditMode ? '保存' : '添加'}
+                </Button>
+                {!isEditMode && (
+                  <Button
+                    onClick={() => handleSaveIcon(true)}
+                    disabled={!formData.url.trim() || !formData.name.trim()}
+                    variant="ghost"
+                    className="flex-1"
+                  >
+                    保存并继续
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          </Portal.Root>
+        )}
+      </AnimatePresence>
     </>
   );
 };
