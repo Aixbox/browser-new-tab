@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import Head from "next/head";
 import { KVNamespace } from "@cloudflare/workers-types";
 import { ComponentLayout, MinimalLayout, SidebarWrapper } from "@/components/home";
@@ -15,6 +15,7 @@ import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { useSyncListeners } from "@/hooks/use-sync-listeners";
 import { usePreloadAssets } from "@/hooks/use-preload-assets";
 import { useGridStore } from "@/lib/grid-store";
+import type { PageGridItems } from "@/lib/grid-store";
 import { useDockStore } from "@/lib/dock-store";
 import type { GridItem, DockItem } from "@/lib/grid-model";
 import builtinIcons from "@/json/index";
@@ -33,22 +34,22 @@ interface HomeProps {
   iconStyle: IconStyleSettings;
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
-  iconItems: GridItem[] | null;
+  pageGridItems: PageGridItems | null;
   dockItems: DockItem[] | null;
   searchEngines: any[] | null;
   selectedEngine: string | null;
 }
 
-export default function Home({ 
-  avatarUrl, 
-  hasSecretKey, 
-  sidebarItems, 
-  openInNewTab, 
-  layoutMode, 
-  iconStyle, 
-  backgroundUrl, 
+export default function Home({
+  avatarUrl,
+  hasSecretKey,
+  sidebarItems,
+  openInNewTab,
+  layoutMode,
+  iconStyle,
+  backgroundUrl,
   sidebarSettings,
-  iconItems,
+  pageGridItems: ssrPageGridItems,
   dockItems: initialDockItems,
   searchEngines,
   selectedEngine
@@ -79,7 +80,10 @@ export default function Home({
 
   const {
     gridItems,
+    pageGridItems,
+    hasInitialized: gridHasInitialized,
     setGridItems,
+    setCurrentPageId: setStorePageId,
     initialize,
   } = useGridStore();
 
@@ -90,11 +94,12 @@ export default function Home({
     initialize: initializeDock,
   } = useDockStore();
 
-  // 初始化图标数据
+  // 初始化图标数据（多页面）
+  const initialPageId = sidebarItems?.[0]?.id || "1";
   const baseTime = useMemo(() => Date.now(), []);
-  const initialGridItems = useMemo<GridItem[]>(() => {
-    if (iconItems && iconItems.length > 0) {
-      return iconItems as GridItem[];
+  const initialPageGridItems = useMemo<PageGridItems>(() => {
+    if (ssrPageGridItems && Object.keys(ssrPageGridItems).length > 0) {
+      return ssrPageGridItems;
     }
 
     const fallbackIcons: GridItem[] = builtinIcons.map((item, index) => ({
@@ -103,14 +108,14 @@ export default function Home({
       id: `${item.id}-${baseTime}-${index}`,
     }));
 
-    return fallbackIcons;
-  }, [baseTime, iconItems]);
+    return { [initialPageId]: fallbackIcons };
+  }, [baseTime, ssrPageGridItems, initialPageId]);
 
   useEffect(() => {
-    if (gridItems.length === 0) {
-      initialize(initialGridItems);
+    if (!gridHasInitialized) {
+      initialize(initialPageGridItems, initialPageId);
     }
-  }, [initialize, initialGridItems, gridItems]);
+  }, [initialize, initialPageGridItems, initialPageId, gridHasInitialized]);
 
   // 初始化 Dock 数据
   useEffect(() => {
@@ -119,10 +124,10 @@ export default function Home({
     }
   }, [initializeDock, initialDockItems, dockHasInitialized]);
 
-  // 监听 gridItems 变化，保存到服务器
+  // 监听 pageGridItems 变化，保存到服务器
   useEffect(() => {
-    if (gridItems.length === 0) return;
-    
+    if (!gridHasInitialized) return;
+
     const saveToServer = async () => {
       try {
         const secret = localStorage.getItem('secret_key');
@@ -131,8 +136,8 @@ export default function Home({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: 'setSetting',
-            key: "icon_items",
-            value: JSON.stringify(gridItems),
+            key: "page_grid_items",
+            value: JSON.stringify(pageGridItems),
             secret,
           }),
         });
@@ -142,9 +147,9 @@ export default function Home({
         console.error("Failed to save grid items:", error);
       }
     };
-    
+
     saveToServer();
-  }, [gridItems]);
+  }, [pageGridItems, gridHasInitialized]);
 
   // 监听 dockItems 变化，保存到服务器
   useEffect(() => {
@@ -186,9 +191,15 @@ export default function Home({
   });
 
   usePreloadAssets({
-    gridItems,
+    pageGridItems,
     avatarUrl,
   });
+
+  // 页面切换联动：同时更新侧边栏高亮和 grid store
+  const handlePageChange = useCallback((pageId: string) => {
+    setCurrentPageId(pageId);
+    setStorePageId(pageId);
+  }, [setCurrentPageId, setStorePageId]);
 
   return (
     <>
@@ -244,7 +255,7 @@ export default function Home({
             sidebarSettings={currentSidebarSettings}
             isSidebarVisible={isSidebarVisible}
             onAvatarClick={() => setIsSettingsOpen(true)}
-            onPageChange={setCurrentPageId}
+            onPageChange={handlePageChange}
             currentPageId={currentPageId}
             onItemsChange={setCurrentSidebarItems}
           />
@@ -261,7 +272,7 @@ export default function Home({
             currentSidebarSettings={currentSidebarSettings}
             isSidebarVisible={isSidebarVisible}
             onOpenSettings={() => setIsSettingsOpen(true)}
-            onPageChange={setCurrentPageId}
+            onPageChange={handlePageChange}
             currentPageId={currentPageId}
             onSidebarItemsChange={setCurrentSidebarItems}
             currentIconStyle={currentIconStyle}
@@ -398,14 +409,29 @@ export async function getServerSideProps() {
 
       const selectedEngine = await NEWTAB_KV.get('selected_engine');
 
-      // 读取图标数据
-      const iconItemsStr = await NEWTAB_KV.get('icon_items');
-      let iconItems: any[] | null = null;
-      if (iconItemsStr) {
+      // 读取图标数据（优先 page_grid_items，兼容旧 icon_items）
+      const pageGridItemsStr = await NEWTAB_KV.get('page_grid_items');
+      let pageGridItems: Record<string, any[]> | null = null;
+      if (pageGridItemsStr) {
         try {
-          iconItems = JSON.parse(iconItemsStr);
+          pageGridItems = JSON.parse(pageGridItemsStr);
         } catch (error) {
-          console.error('Failed to parse icon items:', error);
+          console.error('Failed to parse page grid items:', error);
+        }
+      }
+      // 旧格式迁移：将 icon_items 包装为第一个页面
+      if (!pageGridItems) {
+        const iconItemsStr = await NEWTAB_KV.get('icon_items');
+        if (iconItemsStr) {
+          try {
+            const iconItems = JSON.parse(iconItemsStr);
+            if (Array.isArray(iconItems) && iconItems.length > 0) {
+              const firstPageId = sidebarItems?.[0]?.id || "1";
+              pageGridItems = { [firstPageId]: iconItems };
+            }
+          } catch (error) {
+            console.error('Failed to parse icon items:', error);
+          }
         }
       }
 
@@ -430,7 +456,7 @@ export async function getServerSideProps() {
           iconStyle,
           backgroundUrl,
           sidebarSettings,
-          iconItems,
+          pageGridItems,
           dockItems,
           searchEngines,
           selectedEngine,
@@ -451,7 +477,7 @@ export async function getServerSideProps() {
       iconStyle,
       backgroundUrl,
       sidebarSettings,
-      iconItems: null,
+      pageGridItems: null,
       dockItems: null,
       searchEngines: null,
       selectedEngine: null,
