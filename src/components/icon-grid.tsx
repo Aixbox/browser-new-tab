@@ -545,11 +545,19 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
     }
     folderHoverStateRef.current.hoveredFolder = null;
     folderHoverStateRef.current.hoverStartTime = null;
-    
+
     if (mergeStateRef.current.highlightedElement) {
       mergeStateRef.current.highlightedElement.classList.remove('merge-highlight');
     }
-    
+
+    // 跨容器拖拽（拖到 Dock 或从 Dock 拖入），跳过合并逻辑
+    if (evt.from !== evt.to) {
+      mergeStateRef.current.mergeMode = false;
+      mergeStateRef.current.mergePosition = null;
+      mergeStateRef.current.highlightedElement = null;
+      return;
+    }
+
     if (mergeStateRef.current.mergeMode && evt.oldIndex !== undefined && mergeStateRef.current.highlightedElement) {
       const draggedItem = items[evt.oldIndex];
       
@@ -655,14 +663,24 @@ export const IconGrid = ({ items, onItemsChange, openInNewTab, iconStyle }: Icon
           list={items.map((item) => ({ ...item, chosen: false, selected: false }))}
           setList={(newState) => {
             const currentRefCount = latestFolderItemsRef.current.length;
-            
+
             console.log('🔵 外部网格 setList 被调用:', {
               lastOpenFolderId: lastOpenFolderIdRef.current,
               newStateCount: newState.length,
               folderItemsCount: folderItems.length,
               latestFolderItemsRefCount: currentRefCount
             });
-            
+
+            // 跨容器拖拽：项目数量变化时，强制清除合并状态
+            if (newState.length !== items.length) {
+              mergeStateRef.current.mergeMode = false;
+              mergeStateRef.current.mergePosition = null;
+              if (mergeStateRef.current.highlightedElement) {
+                mergeStateRef.current.highlightedElement.classList.remove('merge-highlight');
+                mergeStateRef.current.highlightedElement = null;
+              }
+            }
+
             // 如果处于合并模式，不执行默认的排序更新
             // 合并逻辑会在 onEnd 中处理
             if (!mergeStateRef.current.mergeMode) {

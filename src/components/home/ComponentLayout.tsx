@@ -2,10 +2,11 @@ import { SearchEngine } from "@/components/search-engine";
 import { SimpleTimeDisplay } from "@/components/simple-time-display";
 import { SidebarWrapper } from "@/components/home/SidebarWrapper";
 import { IconGrid } from "@/components/icon-grid";
+import { DockBar } from "@/components/dock-bar";
 import type { SidebarItem } from "@/components/custom-sidebar";
 import type { IconStyleSettings } from "@/components/icon-settings";
 import type { SidebarSettings } from "@/components/sidebar-settings";
-import type { GridItem } from "@/lib/grid-model";
+import type { GridItem, DockItem } from "@/lib/grid-model";
 
 interface ComponentLayoutProps {
   avatarUrl: string | null;
@@ -22,6 +23,8 @@ interface ComponentLayoutProps {
   currentIconStyle: IconStyleSettings;
   gridItems: GridItem[];
   onGridItemsChange: (items: GridItem[]) => void;
+  dockItems: DockItem[];
+  onDockItemsChange: (items: DockItem[]) => void;
 }
 
 export const ComponentLayout = ({
@@ -39,6 +42,8 @@ export const ComponentLayout = ({
   currentIconStyle,
   gridItems,
   onGridItemsChange,
+  dockItems,
+  onDockItemsChange,
 }: ComponentLayoutProps) => {
   return (
     <>
@@ -67,7 +72,7 @@ export const ComponentLayout = ({
             initialSelectedEngine={selectedEngine}
           />
         </div>
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-8 pb-8">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-8 pb-24">
           <div className="w-full h-full" style={{ maxWidth: `${currentIconStyle.maxWidth}px`, margin: "0 auto" }}>
             <IconGrid
               items={gridItems}
@@ -78,6 +83,12 @@ export const ComponentLayout = ({
           </div>
         </div>
       </div>
+      <DockBar
+        items={dockItems}
+        onItemsChange={onDockItemsChange}
+        openInNewTab={openInNewTab.icon}
+        iconStyle={currentIconStyle}
+      />
     </>
   );
 };

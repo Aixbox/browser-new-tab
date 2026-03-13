@@ -3,7 +3,8 @@
     "allow": [
       "Bash(pnpm run lint)",
       "Bash(pnpm install --save-dev eslint eslint-config-next)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

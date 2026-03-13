@@ -15,7 +15,8 @@ import { useSidebarAutoHide } from "@/hooks/use-sidebar-auto-hide";
 import { useSyncListeners } from "@/hooks/use-sync-listeners";
 import { usePreloadAssets } from "@/hooks/use-preload-assets";
 import { useGridStore } from "@/lib/grid-store";
-import type { GridItem } from "@/lib/grid-model";
+import { useDockStore } from "@/lib/dock-store";
+import type { GridItem, DockItem } from "@/lib/grid-model";
 import builtinIcons from "@/json/index";
 
 // 使用 Edge Runtime
@@ -33,6 +34,7 @@ interface HomeProps {
   backgroundUrl: string | null;
   sidebarSettings: SidebarSettings;
   iconItems: GridItem[] | null;
+  dockItems: DockItem[] | null;
   searchEngines: any[] | null;
   selectedEngine: string | null;
 }
@@ -47,8 +49,9 @@ export default function Home({
   backgroundUrl, 
   sidebarSettings,
   iconItems,
-  searchEngines, 
-  selectedEngine 
+  dockItems: initialDockItems,
+  searchEngines,
+  selectedEngine
 }: HomeProps) {
   const {
     isSettingsOpen,
@@ -80,6 +83,13 @@ export default function Home({
     initialize,
   } = useGridStore();
 
+  const {
+    dockItems,
+    setDockItems,
+    hasInitialized: dockHasInitialized,
+    initialize: initializeDock,
+  } = useDockStore();
+
   // 初始化图标数据
   const baseTime = useMemo(() => Date.now(), []);
   const initialGridItems = useMemo<GridItem[]>(() => {
@@ -101,6 +111,13 @@ export default function Home({
       initialize(initialGridItems);
     }
   }, [initialize, initialGridItems, gridItems]);
+
+  // 初始化 Dock 数据
+  useEffect(() => {
+    if (!dockHasInitialized) {
+      initializeDock(initialDockItems || []);
+    }
+  }, [initializeDock, initialDockItems, dockHasInitialized]);
 
   // 监听 gridItems 变化，保存到服务器
   useEffect(() => {
@@ -128,6 +145,33 @@ export default function Home({
     
     saveToServer();
   }, [gridItems]);
+
+  // 监听 dockItems 变化，保存到服务器
+  useEffect(() => {
+    if (!dockHasInitialized) return;
+
+    const saveToServer = async () => {
+      try {
+        const secret = localStorage.getItem('secret_key');
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: 'setSetting',
+            key: "dock_items",
+            value: JSON.stringify(dockItems),
+            secret,
+          }),
+        });
+        const { updateRemoteTimestamp } = await import("@/hooks/use-data-sync");
+        await updateRemoteTimestamp("dockIcons");
+      } catch (error) {
+        console.error("Failed to save dock items:", error);
+      }
+    };
+
+    saveToServer();
+  }, [dockItems, dockHasInitialized]);
 
   useSettingsSync(setCurrentLayoutMode, setCurrentIconStyle, setCurrentBackgroundUrl, setCurrentSidebarSettings);
   useSidebarAutoHide(currentSidebarSettings, setIsSidebarVisible);
@@ -223,6 +267,8 @@ export default function Home({
             currentIconStyle={currentIconStyle}
             gridItems={gridItems}
             onGridItemsChange={setGridItems}
+            dockItems={dockItems}
+            onDockItemsChange={setDockItems}
           />
         ) : (
           <MinimalLayout
@@ -363,6 +409,17 @@ export async function getServerSideProps() {
         }
       }
 
+      // 读取 Dock 数据
+      const dockItemsStr = await NEWTAB_KV.get('dock_items');
+      let dockItems: any[] | null = null;
+      if (dockItemsStr) {
+        try {
+          dockItems = JSON.parse(dockItemsStr);
+        } catch (error) {
+          console.error('Failed to parse dock items:', error);
+        }
+      }
+
       return {
         props: {
           avatarUrl,
@@ -374,6 +431,7 @@ export async function getServerSideProps() {
           backgroundUrl,
           sidebarSettings,
           iconItems,
+          dockItems,
           searchEngines,
           selectedEngine,
         },
@@ -394,6 +452,7 @@ export async function getServerSideProps() {
       backgroundUrl,
       sidebarSettings,
       iconItems: null,
+      dockItems: null,
       searchEngines: null,
       selectedEngine: null,
     },
