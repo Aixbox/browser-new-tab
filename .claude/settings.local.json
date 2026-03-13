@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(pnpm run lint)",
-      "Bash(pnpm install --save-dev eslint eslint-config-next)"
+      "Bash(pnpm install --save-dev eslint eslint-config-next)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
